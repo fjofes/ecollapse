@@ -1,0 +1,1580 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Ecollapse</title>
+<style>
+:root{
+  --petrol:#347e84;        /* fond identitaire du livret */
+  --petrol-d:#27636a;
+  --petrol-dd:#1d4d53;
+  --ink:#0e2a2e;
+  --paper:#eef3f1;
+  --sand:#d9c39a;          /* plastique / continent */
+  --sand-d:#b89a63;
+  --hab:#c0392b;           /* habitation */
+  --farm:#5cb85c;          /* ferme */
+  --fact:#34352f;          /* usine */
+  --plant:#dfe4e6;         /* centrale */
+  --recy:#3a48a6;          /* centre de recyclage */
+  --gulf:#5350c4;          /* gulf stream */
+  --good:#5cb85c;
+  --bad:#e0573f;
+  --warn:#e8b13a;
+  --line:rgba(255,255,255,.16);
+  --panel:rgba(255,255,255,.06);
+  --shadow:0 10px 30px rgba(0,0,0,.28);
+  font-synthesis:none;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:
+    radial-gradient(120% 90% at 80% -10%, #3f9097 0%, transparent 55%),
+    radial-gradient(120% 100% at -10% 110%, #1d4d53 0%, transparent 60%),
+    var(--petrol);
+  color:var(--paper);
+  -webkit-tap-highlight-color:transparent;
+  overflow-x:hidden;
+}
+h1,h2,h3{margin:0;font-weight:800;letter-spacing:.2px}
+button{font-family:inherit;cursor:pointer;border:none}
+.hidden{display:none !important}
+
+/* ---------- SETUP ---------- */
+#setup{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px}
+.setup-card{
+  width:min(560px,100%);
+  background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));
+  border:1px solid var(--line);border-radius:20px;padding:28px;box-shadow:var(--shadow);
+  backdrop-filter:blur(6px);
+}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.brand .logo{
+  font-weight:900;font-size:42px;letter-spacing:-1px;line-height:1;
+  background:linear-gradient(180deg,#fff,#cfe6e3);-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.brand .recy-o{display:inline-block;transform:translateY(2px)}
+.tagline{color:#cfe1de;font-size:14px;margin:0 0 22px}
+.field{margin:16px 0}
+.field>label{display:block;font-size:13px;text-transform:uppercase;letter-spacing:1.4px;color:#bcd6d2;margin-bottom:8px}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg button{
+  flex:1;min-width:64px;padding:12px;border-radius:12px;background:var(--panel);
+  border:1px solid var(--line);color:var(--paper);font-weight:700;font-size:16px;transition:.15s
+}
+.seg button.on{background:#fff;color:var(--ink);border-color:#fff}
+.names{display:grid;gap:8px}
+.names input{
+  padding:12px 14px;border-radius:12px;background:rgba(0,0,0,.18);border:1px solid var(--line);
+  color:var(--paper);font-size:15px;outline:none
+}
+.names input:focus{border-color:#fff}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
+.toggle .t-txt small{display:block;color:#a9c6c2;font-weight:400;font-size:12px;margin-top:2px}
+.switch{position:relative;width:46px;height:26px;flex:none}
+.switch input{display:none}
+.switch span{position:absolute;inset:0;background:rgba(0,0,0,.3);border-radius:20px;transition:.18s}
+.switch span::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.18s}
+.switch input:checked+span{background:var(--good)}
+.switch input:checked+span::after{transform:translateX(20px)}
+.start{
+  width:100%;margin-top:18px;padding:16px;border-radius:14px;font-size:17px;font-weight:800;
+  background:linear-gradient(180deg,#7fe0b0,#46b985);color:#063b27;box-shadow:0 8px 20px rgba(70,185,133,.35)
+}
+.start:active{transform:translateY(1px)}
+details.rules{margin-top:18px;font-size:13px;color:#cfe1de}
+details.rules summary{cursor:pointer;color:#fff;font-weight:700}
+details.rules ul{padding-left:18px;line-height:1.5}
+
+/* ---------- GAME ---------- */
+#game{min-height:100dvh;display:flex;flex-direction:column}
+.topbar{
+  position:sticky;top:0;z-index:30;
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  background:linear-gradient(180deg,rgba(20,55,60,.96),rgba(20,55,60,.82));
+  border-bottom:1px solid var(--line);backdrop-filter:blur(8px)
+}
+.topbar .round{font-weight:800;white-space:nowrap}
+.topbar .round small{display:block;font-weight:500;color:#a9c6c2;font-size:11px}
+.event-chip{
+  flex:1;min-width:0;display:flex;align-items:center;gap:8px;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 10px;overflow:hidden
+}
+.event-chip .e-ico{font-size:20px;flex:none}
+.event-chip .e-txt{min-width:0}
+.event-chip .e-txt b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.event-chip .e-txt small{display:block;color:#bcd6d2;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plastic{
+  display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.22);border:1px solid var(--sand-d);
+  border-radius:12px;padding:6px 10px;white-space:nowrap
+}
+.plastic .pbar{width:70px;height:8px;border-radius:6px;background:rgba(255,255,255,.15);overflow:hidden}
+.plastic .pbar i{display:block;height:100%;background:linear-gradient(90deg,var(--sand),var(--bad))}
+.plastic b{font-size:13px}
+
+.layout{flex:1;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.9fr);gap:14px;padding:14px;max-width:1280px;width:100%;margin:0 auto}
+@media(max-width:900px){.layout{grid-template-columns:1fr;padding:10px}}
+
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:var(--shadow)}
+.card h3{font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:#bcd6d2;margin-bottom:10px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+
+/* player header */
+.phead{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.pdot{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:0 0 0 3px rgba(255,255,255,.12)}
+.phead .pname{font-size:18px;font-weight:800}
+.phead .pturn{font-size:11px;color:#9fc1bc;text-transform:uppercase;letter-spacing:1px}
+.res-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.res{display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.2);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-weight:800;font-size:15px}
+.res .ic{font-size:16px}
+.res small{font-weight:600;color:#a9c6c2;font-size:11px}
+
+/* board */
+.board-wrap{position:relative;display:flex;flex-direction:column;align-items:center}
+svg.board{width:100%;height:auto;touch-action:manipulation;max-height:54vh}
+.hexcell{cursor:pointer;transition:filter .12s}
+.hexcell:hover{filter:brightness(1.12)}
+.cell-empty{fill:rgba(255,255,255,.05);stroke:rgba(255,255,255,.14)}
+.cell-elig{stroke:var(--warn);stroke-width:3;filter:drop-shadow(0 0 6px rgba(232,177,58,.7))}
+.cell-recyc-src{stroke:var(--good);stroke-width:3;filter:drop-shadow(0 0 6px rgba(92,184,92,.7))}
+.cellico{font-size:20px;pointer-events:none;dominant-baseline:central;text-anchor:middle}
+.lvlbadge{pointer-events:none}
+.pollchip{pointer-events:none}
+
+/* gulf ring */
+.gulf-wrap{display:flex;flex-direction:column;align-items:center}
+svg.gulf{width:100%;max-width:360px;height:auto}
+.gulf .slot{transition:.15s}
+.gulf .slot.elig{stroke:var(--warn);stroke-width:3}
+.gulf .mine{stroke:#fff;stroke-width:2.5}
+.gulf-cap{font-size:11px;color:#a9c6c2;text-align:center;margin-top:6px}
+
+/* action bar */
+.actions{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.actions .act{
+  display:flex;flex-direction:column;align-items:center;gap:3px;padding:12px 8px;border-radius:14px;
+  background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--paper);font-weight:700;font-size:13px;transition:.12s
+}
+.actions .act .a-ic{font-size:20px}
+.actions .act:active{transform:translateY(1px)}
+.actions .act.busy{outline:2px solid var(--warn);background:rgba(232,177,58,.14)}
+.actions .act:disabled{opacity:.4;cursor:not-allowed}
+.act.end{grid-column:1/-1;background:linear-gradient(180deg,#7fe0b0,#46b985);color:#063b27}
+
+.hint{margin-top:10px;padding:10px 12px;border-radius:12px;background:rgba(232,177,58,.13);border:1px solid rgba(232,177,58,.4);font-size:13px;line-height:1.4}
+.hint b{color:#ffe9b3}
+.hint .mini{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.hint .mini button{padding:7px 11px;border-radius:9px;background:#fff;color:var(--ink);font-weight:700;font-size:13px}
+.hint .mini button.ghost{background:rgba(255,255,255,.12);color:#fff;border:1px solid var(--line)}
+
+/* others overview */
+.others{display:flex;gap:8px;flex-wrap:wrap}
+.opill{display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.18);border:1px solid var(--line);border-radius:20px;padding:5px 10px;font-size:12px;font-weight:700}
+.opill .d{width:9px;height:9px;border-radius:50%}
+
+/* log */
+.log{max-height:150px;overflow:auto;font-size:12.5px;line-height:1.5;color:#d4e6e2}
+.log div{padding:2px 0;border-bottom:1px dashed rgba(255,255,255,.06)}
+.log .me{color:#ffe9b3}
+
+/* legend */
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px}
+.legend .lg{display:flex;align-items:center;gap:7px;background:rgba(0,0,0,.15);border-radius:9px;padding:6px 8px}
+.legend .lg .sw{width:14px;height:14px;border-radius:4px;flex:none}
+
+/* modal */
+.modal{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(8,28,30,.7);backdrop-filter:blur(4px)}
+.sheet{width:min(520px,100%);max-height:88dvh;overflow:auto;background:linear-gradient(180deg,#235a60,#1a464c);border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:var(--shadow)}
+.sheet h2{font-size:20px;margin-bottom:4px}
+.sheet p.sub{color:#bcd6d2;font-size:13px;margin:0 0 14px}
+.choices{display:grid;gap:8px}
+.choice{display:flex;align-items:center;gap:12px;text-align:left;padding:12px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--paper)}
+.choice:disabled{opacity:.4}
+.choice .ci{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+.choice .cb{flex:1;min-width:0}
+.choice .cb b{display:block;font-size:15px}
+.choice .cb small{display:block;color:#bcd6d2;font-size:12px}
+.choice .cost{font-size:12px;font-weight:800;white-space:nowrap}
+.choice .cost.ko{color:var(--bad)}
+.sheet .closebar{display:flex;gap:8px;margin-top:14px}
+.sheet .closebar button{flex:1;padding:12px;border-radius:12px;font-weight:700;background:rgba(255,255,255,.1);border:1px solid var(--line);color:#fff}
+
+/* end screen */
+#end{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
+.endcard{width:min(620px,100%);background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));border:1px solid var(--line);border-radius:20px;padding:26px;box-shadow:var(--shadow)}
+.win{font-size:26px;font-weight:900;margin-bottom:4px}
+.score-row{display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;background:rgba(0,0,0,.16);margin-bottom:8px}
+.score-row.first{outline:2px solid var(--warn)}
+.score-row .rk{font-weight:900;width:26px;text-align:center}
+.score-row .nm{flex:1;font-weight:800}
+.score-row .pts{font-weight:900;font-size:20px}
+.score-row .brk{font-size:11px;color:#bcd6d2}
+.again{width:100%;margin-top:16px;padding:14px;border-radius:14px;font-weight:800;background:#fff;color:var(--ink)}
+
+.diceroll{font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+
+<!-- ================= SETUP ================= -->
+<section id="setup">
+  <div class="setup-card">
+    <div class="brand">
+      <div class="logo">EC<span class="recy-o">♻</span>LLAPSE</div>
+    </div>
+    <p class="tagline">Bâtissez votre société, produisez, échangez… et polluez. Chaque action a une conséquence. Le plus de points de victoire l'emporte.</p>
+
+    <div class="field">
+      <label>Nombre de joueurs</label>
+      <div class="seg" id="seg-count">
+        <button data-n="2">2</button>
+        <button data-n="3" class="on">3</button>
+        <button data-n="4">4</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Noms des joueurs</label>
+      <div class="names" id="names"></div>
+    </div>
+
+    <div class="field">
+      <label>Options</label>
+      <div class="toggle">
+        <div class="t-txt">Variante 1 — Objectifs<small>Chaque joueur reçoit un objectif secret valant des P.v</small></div>
+        <label class="switch"><input type="checkbox" id="opt-obj" checked><span></span></label>
+      </div>
+      <div class="toggle">
+        <div class="t-txt">Cartes catastrophe<small>Déconseillé pour une première partie : détruit des bâtiments</small></div>
+        <label class="switch"><input type="checkbox" id="opt-cat"><span></span></label>
+      </div>
+    </div>
+
+    <button class="start" id="btn-online">🌐 Jouer en ligne (2 appareils ou +)</button>
+    <button class="start" id="btn-start" style="margin-top:10px;background:transparent;border:1px solid var(--line);color:#cfe6e2">📱 Jouer en local (même appareil)</button>
+
+    <details class="rules">
+      <summary>Rappel express des règles</summary>
+      <ul>
+        <li>À votre tour : payez la <b>taxe d'habitation</b> (1 nourriture par habitation), puis enchaînez librement <b>Production</b>, <b>Construction</b> et <b>Recyclage</b>.</li>
+        <li>Produire ou construire génère <b>1 pollution</b> à placer sur votre Gulf Stream (niveau libre) ou sur votre plateau (Niv.1, adjacent à un bâtiment).</li>
+        <li>On ne construit qu'en <b>remplaçant un pion construction</b>. Les habitations fournissent ces pions.</li>
+        <li>Recycler depuis le Gulf Stream rapporte des <b>points de recyclage</b> (2 P.v chacun).</li>
+        <li>Le Gulf Stream tourne d'une case à chaque tour ; un dé 12 envoie la pollution vers le <b>continent de plastique</b>. À 30, la partie s'arrête.</li>
+      </ul>
+    </details>
+  </div>
+</section>
+
+<!-- ================= LOBBY EN LIGNE ================= -->
+<section id="online" class="hidden">
+  <div class="setup-card">
+    <div class="brand"><div class="logo">EC<span class="recy-o">♻</span>LLAPSE</div></div>
+    <p class="tagline" id="lobby-role">Partie en ligne</p>
+
+    <div id="lobby-connecting" style="text-align:center;color:#bcd6d2;padding:20px">Connexion au salon…</div>
+
+    <div id="lobby-main" class="hidden">
+      <div class="field" style="text-align:center">
+        <label>Code de la partie</label>
+        <div id="room-code" style="font-size:30px;font-weight:900;letter-spacing:4px;color:#fff">——</div>
+        <img id="room-qr" alt="QR code pour rejoindre" style="width:200px;height:200px;border-radius:14px;margin:12px auto 4px;display:block;background:#fff;padding:8px">
+        <div style="font-size:12px;color:#bcd6d2">Les autres joueurs scannent ce QR code, ou ouvrent le lien :</div>
+        <div id="room-link" style="font-size:11px;color:#9fc1bc;word-break:break-all;margin-top:4px"></div>
+        <button id="btn-copy" style="margin-top:8px;padding:8px 14px;border-radius:10px;background:rgba(255,255,255,.1);color:#fff;border:1px solid var(--line);cursor:pointer">Copier le lien</button>
+      </div>
+
+      <div class="field">
+        <label>Joueurs connectés (<span id="lobby-count">0</span>)</label>
+        <div class="others" id="lobby-players"></div>
+      </div>
+
+      <div id="host-controls" class="hidden">
+        <div class="field">
+          <label>Options (réglées par l'hôte)</label>
+          <div class="toggle">
+            <div class="t-txt">Variante 1 — Objectifs<small>Objectif secret valant des P.v</small></div>
+            <label class="switch"><input type="checkbox" id="lob-obj" checked><span></span></label>
+          </div>
+          <div class="toggle">
+            <div class="t-txt">Cartes catastrophe<small>Déconseillé en première partie</small></div>
+            <label class="switch"><input type="checkbox" id="lob-cat"><span></span></label>
+          </div>
+        </div>
+        <button class="start" id="btn-launch">Démarrer la partie</button>
+        <div class="hint" id="lobby-hint" style="margin-top:10px">Il faut au moins 2 joueurs connectés.</div>
+      </div>
+      <div id="guest-wait" class="hidden" style="text-align:center;color:#7fe0b0;padding:14px;font-weight:700">
+        En attente que l'hôte démarre la partie…
+      </div>
+
+      <div id="lobby-error" class="hidden" style="margin-top:12px;padding:12px;border-radius:10px;background:rgba(224,87,63,.15);color:#ffb4a6;font-size:13px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= GAME ================= -->
+<section id="game" class="hidden">
+  <div class="topbar">
+    <div class="round"><span id="round-n">Tour 1</span><small id="phase-mini">Mise en place</small></div>
+    <div class="event-chip" id="event-chip" title="Carte événement du tour de table">
+      <div class="e-ico" id="event-ico">🌤️</div>
+      <div class="e-txt"><b id="event-name">—</b><small id="event-desc">Pas encore de carte</small></div>
+    </div>
+    <div class="plastic" title="Continent de plastique — fin de partie à 30">
+      <span>🗑️</span>
+      <div class="pbar"><i id="plastic-bar" style="width:0%"></i></div>
+      <b><span id="plastic-n">0</span>/30</b>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- LEFT -->
+    <div class="col">
+      <div class="card">
+        <div class="phead">
+          <span class="pdot" id="p-dot"></span>
+          <div>
+            <div class="pname" id="p-name">Joueur</div>
+            <div class="pturn" id="p-turn">à jouer</div>
+          </div>
+        </div>
+        <div class="res-row" id="res-row"></div>
+      </div>
+
+      <div class="card">
+        <h3>Plateau de la ville <span id="board-sub" style="font-weight:600;color:#9fc1bc;text-transform:none;letter-spacing:0"></span></h3>
+        <div class="board-wrap">
+          <svg class="board" id="board" viewBox="0 0 600 560" aria-label="Plateau joueur"></svg>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Gulf Stream <span id="gulf-sub" style="font-weight:600;color:#9fc1bc;text-transform:none;letter-spacing:0">votre portion encadrée de blanc</span></h3>
+        <div class="gulf-wrap">
+          <svg class="gulf" id="gulf" viewBox="0 0 360 360" aria-label="Gulf Stream"></svg>
+        </div>
+        <div class="gulf-cap">Le courant tourne dans le sens inverse du jeu. Un 🎲 12 envoie la pollution des cases tirées vers le continent de plastique.</div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="col">
+      <div class="card">
+        <h3>Actions</h3>
+        <div class="actions">
+          <button class="act" id="act-produce"><span class="a-ic">⚙️</span>Produire</button>
+          <button class="act" id="act-build"><span class="a-ic">🏗️</span>Construire</button>
+          <button class="act" id="act-recycle"><span class="a-ic">♻️</span>Recycler</button>
+          <button class="act" id="act-trade"><span class="a-ic">🤝</span>Échanger</button>
+          <button class="act end" id="act-end"><span class="a-ic">⏭️</span>Terminer le tour</button>
+        </div>
+        <div class="hint" id="hint">Sélectionnez une action. Vous pouvez en faire plusieurs avant de terminer votre tour.</div>
+      </div>
+
+      <div class="card" id="obj-card">
+        <h3>Objectif secret 🎯</h3>
+        <div id="obj-body" style="font-size:13px;line-height:1.5"></div>
+      </div>
+
+      <div class="card">
+        <h3>Autres joueurs</h3>
+        <div class="others" id="others"></div>
+      </div>
+
+      <div class="card">
+        <h3>Bâtiments</h3>
+        <div class="legend" id="legend"></div>
+      </div>
+
+      <div class="card">
+        <h3>Journal</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= END ================= -->
+<section id="end" class="hidden">
+  <div class="endcard">
+    <div class="win" id="win-line"></div>
+    <p style="color:#bcd6d2;margin:0 0 18px" id="end-reason"></p>
+    <div id="scores"></div>
+    <button class="again" id="btn-again">Nouvelle partie</button>
+  </div>
+</section>
+
+<!-- modal mount -->
+<div id="modal-mount"></div>
+
+<!-- Chargement du SDK Playroom Kit (module ES depuis un CDN). -->
+<script type="module">
+  try{
+    const PR = await import("https://esm.sh/playroomkit");
+    window.Playroom = PR;
+    window.__PLAYROOM_READY = true;
+    window.dispatchEvent(new Event("playroom-ready"));
+  }catch(e){
+    window.__PLAYROOM_ERROR = e;
+    window.dispatchEvent(new Event("playroom-failed"));
+    console.error("Playroom load failed", e);
+  }
+</script>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   CONFIG — valeurs de jeu. Faciles à ajuster pour coller exactement à vos
+   tableaux du livret (coûts, productions, P.v).
+   ========================================================================= */
+const RES = {
+  food:  {ic:"🍎", label:"Nourriture"},
+  energy:{ic:"⚡", label:"Énergie"},
+  raw:   {ic:"🪵", label:"Matière 1ère"},
+  recy:  {ic:"♻️", label:"Pts recyclage"},
+};
+const RES_ORDER = ["food","energy","raw","recy"];
+
+const B = {
+  habitation:{
+    name:"Habitation", color:"#c0392b", ic:"🏠", produces:null,
+    cost:[null,{food:1},{food:2},{food:3}],
+    vp:[0,1,2,4],
+    desc:"Fournit des pions construction (= son niveau). Seule à pouvoir lancer la ville.",
+  },
+  ferme:{
+    name:"Ferme", color:"#5cb85c", ic:"🌾", produces:"food", output:[0,2,3,4],
+    cost:[null,{energy:1},{energy:2,raw:1},{energy:3,raw:2}],
+    vp:[0,2,3,5],
+    desc:"Produit de la nourriture.",
+  },
+  usine:{
+    name:"Usine", color:"#34352f", ic:"🏭", produces:"raw", output:[0,2,3,4],
+    cost:[null,{food:1,energy:1},{food:2,energy:2},{food:3,energy:3}],
+    vp:[0,2,3,5],
+    desc:"Produit de la matière première.",
+  },
+  centrale:{
+    name:"Centrale", color:"#cfd6d9", ic:"🔋", produces:"energy", output:[0,2,3,4],
+    cost:[null,{food:1,raw:1},{food:2,raw:2},{food:3,raw:3}],
+    vp:[0,2,3,5],
+    desc:"Produit de l'énergie.",
+  },
+  recyclage:{
+    name:"Centre de recyclage", color:"#3a48a6", ic:"♻️", produces:null,
+    cost:[null,{food:1,energy:1,raw:1},{food:2,energy:2,raw:2},{food:3,energy:3,raw:3}],
+    reqRecy:[0,0,5,15],          // pts de recyclage requis (non dépensés) pour construire ce niveau
+    recyCap:[0,1,2,3],           // pollutions recyclables par utilisation
+    gainRes:[0,0,1,2],           // ressources (énergie/MP) gagnées en plus
+    vp:[0,3,5,7],
+    desc:"Recycle la pollution sans générer de pollution. Niv.2/3 : gagne aussi des ressources.",
+  },
+};
+const POLL_PENALTY = [0,-1,-3,-5];
+
+/* Cartes météo (effets appliqués au tour de table en cours) */
+const WEATHER = [
+  {id:"precip", ic:"🌧️", name:"Précipitation intense", desc:"Les fermes produisent +1.", mod:{ferme:+1}},
+  {id:"anom",   ic:"🌡️", name:"Anomalie thermique",   desc:"Les fermes produisent −1.", mod:{ferme:-1}},
+  {id:"solar",  ic:"☀️", name:"Sur-irradiation solaire", desc:"Les centrales produisent +1.", mod:{centrale:+1}},
+  {id:"polar",  ic:"❄️", name:"Blocage atmosphérique polaire", desc:"Les centrales produisent −1.", mod:{centrale:-1}},
+  {id:"stable", ic:"🌈", name:"Climat stable",         desc:"Les usines produisent +1.", mod:{usine:+1}},
+  {id:"smog",   ic:"🏙️", name:"Saturation particulaire urbaine", desc:"Les usines produisent −1.", mod:{usine:-1}},
+  {id:"curr",   ic:"🌊", name:"Renforcement des courants", desc:"Le Gulf Stream avance de 2 cases.", rot:2},
+  {id:"stag",   ic:"🧊", name:"Stagnation thermohaline", desc:"Le Gulf Stream s'immobilise ce tour.", rot:0},
+  {id:"mix",    ic:"🌀", name:"Brassage océanique",     desc:"On lance le dé 12 deux fois en début de tour.", dice2:true},
+];
+/* Cartes catastrophe : détruit le bâtiment du plus haut niveau correspondant */
+const CATASTROPHE = [
+  {id:"fire",  ic:"🔥", name:"Incendie",            target:{type:"ferme"},   desc:"1 ferme est détruite."},
+  {id:"quake", ic:"🏚️", name:"Tremblement de terre",target:{type:"habitation"},desc:"1 habitation est détruite."},
+  {id:"radio", ic:"☢️", name:"Fuite radioactive",   target:{type:"centrale"},desc:"1 centrale est détruite."},
+  {id:"chem",  ic:"⚗️", name:"Accident chimique",   target:{type:"usine"},   desc:"1 usine est détruite."},
+  {id:"land",  ic:"⛰️", name:"Glissement de terrain",target:{pos:"center"},  desc:"1 bâtiment au centre est détruit."},
+  {id:"tsu",   ic:"🌊", name:"Tsunami",             target:{pos:"coast"},    desc:"1 bâtiment côtier est détruit."},
+];
+
+/* Objectifs (variante 1) — sous-ensemble vérifiable automatiquement */
+const OBJECTIVES = [
+  {id:"agrar", name:"Agrariste", vp:10, desc:"Avoir 3 fermes, dont 2 de niveau 3.",
+    check:p=>cntType(p,"ferme")>=3 && cntTypeLvl(p,"ferme",3)>=2},
+  {id:"grid", name:"Réseau électrique", vp:10, desc:"Avoir 3 centrales, dont 2 de niveau 3.",
+    check:p=>cntType(p,"centrale")>=3 && cntTypeLvl(p,"centrale",3)>=2},
+  {id:"indus", name:"Industriel établi", vp:10, desc:"Avoir 3 usines, dont 2 de niveau 3.",
+    check:p=>cntType(p,"usine")>=3 && cntTypeLvl(p,"usine",3)>=2},
+  {id:"urban", name:"Urbanisme", vp:12, desc:"Avoir 3 habitations de niveau 3.",
+    check:p=>cntTypeLvl(p,"habitation",3)>=3},
+  {id:"techno", name:"Technocrate", vp:12, desc:"Avoir 3 bâtiments de niveau 3 (hors habitation).",
+    check:p=>cntLvlNoHab(p,3)>=3},
+  {id:"engi", name:"Ingénieur", vp:14, desc:"N'avoir aucun bâtiment de niveau 1.",
+    check:p=>allBuildings(p).every(b=>b.lvl>=2)},
+  {id:"spec", name:"Spécialisation", vp:14, desc:"Avoir 3 bâtiments du même type au niveau 3 (hors habitation).",
+    check:p=>["ferme","usine","centrale","recyclage"].some(t=>cntTypeLvl(p,t,3)>=3)},
+  {id:"master", name:"Maître bâtisseur", vp:18, desc:"Avoir 5 bâtiments de niveau 3 (hors habitation).",
+    check:p=>cntLvlNoHab(p,3)>=5},
+  {id:"tri", name:"Spécialiste du tri", vp:18, desc:"Avoir 2 centres de recyclage de niveau 3.",
+    check:p=>cntTypeLvl(p,"recyclage",3)>=2},
+  {id:"extreme", name:"Recyclage extrême", vp:18, desc:"Avoir au moins 20 points de recyclage en fin de partie.",
+    check:p=>p.res.recy>=20},
+  {id:"capi", name:"Capitaliste", vp:12, desc:"Avoir 15 ressources en stock en fin de partie (nourriture+énergie+MP).",
+    check:p=>p.res.food+p.res.energy+p.res.raw>=15},
+  {id:"clean", name:"Gestion optimale", vp:20, desc:"Avoir 0 pollution sur son plateau en fin de partie.",
+    check:p=>boardPollution(p).length===0},
+  {id:"auto", name:"Autonomie", vp:20, desc:"Avoir au moins 1 bâtiment de chaque type au niveau 3 (habitation comprise).",
+    check:p=>["habitation","ferme","usine","centrale","recyclage"].every(t=>cntTypeLvl(p,t,3)>=1)},
+  {id:"puriste", name:"Puriste", vp:20, desc:"N'avoir aucun bâtiment de niveau 3.",
+    check:p=>allBuildings(p).every(b=>b.lvl<3)},
+  {id:"equil", name:"Équilibriste", vp:16, desc:"Avoir le même nombre de bâtiments de chaque type (hors habitation, min 1).",
+    check:p=>{const c=["ferme","usine","centrale","recyclage"].map(t=>cntType(p,t));return c[0]>=1 && c.every(x=>x===c[0]);}},
+];
+
+/* =========================================================================
+   HEX GRID — hexagone "plat" de rayon 2 (19 cases), coordonnées axiales q,r
+   ========================================================================= */
+const HEX_R = 2, HEX_SIZE = 46;
+const DIRS = [[+1,0],[+1,-1],[0,-1],[-1,0],[-1,+1],[0,+1]];
+function buildCells(){
+  const cells=[];
+  for(let q=-HEX_R;q<=HEX_R;q++){
+    for(let r=Math.max(-HEX_R,-q-HEX_R);r<=Math.min(HEX_R,-q+HEX_R);r++){
+      cells.push({q,r,key:q+","+r});
+    }
+  }
+  return cells;
+}
+const CELLS = buildCells();
+const CELL_INDEX = {}; CELLS.forEach((c,i)=>CELL_INDEX[c.key]=i);
+function neighborsKeys(q,r){return DIRS.map(([dq,dr])=>(q+dq)+","+(r+dr)).filter(k=>k in CELL_INDEX);}
+function hexPixel(q,r){
+  const x = HEX_SIZE*1.5*q;
+  const y = HEX_SIZE*Math.sqrt(3)*(r + q/2);
+  return {x:x+300, y:y+280};
+}
+function hexPoints(cx,cy,s){
+  let p=[];
+  for(let i=0;i<6;i++){const a=Math.PI/180*(60*i);p.push((cx+s*Math.cos(a)).toFixed(1)+","+(cy+s*Math.sin(a)).toFixed(1));}
+  return p.join(" ");
+}
+/* rôles spatiaux pour catastrophes */
+function isCenter(c){return c.q===0&&c.r===0;}
+function isCoast(c){return c.r===HEX_R;} // rangée du bas = côtière (face au Gulf Stream)
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+const PCOLORS=["#e0573f","#46b985","#5350c4","#e8b13a"];
+let G = null;
+
+function newPlayer(i,name){
+  // plateau: chaque case -> {kind:'empty'|'pawn'|'pollution'|'building', ...}
+  const board={};
+  CELLS.forEach(c=>board[c.key]={kind:"empty"});
+  return {
+    i, name, color:PCOLORS[i],
+    res:{food:4, energy:3, raw:3, recy:0},
+    board,
+    reservePawns:0,
+    objective:null,
+    // suivi du tour
+    didBuild:false, didProduce:false,
+  };
+}
+
+function initGame(opts){
+  const n=opts.names.length;
+  const players=opts.names.map((nm,i)=>newPlayer(i,nm.trim()||("Joueur "+(i+1))));
+
+  // Gulf Stream : anneau de 24 cases. label 1..12 (deux par numéro).
+  const gulf=[];
+  for(let s=0;s<24;s++) gulf.push({tokens:[], num:(s%12)+1});
+  // portion de 3 cases par joueur, réparties autour de l'anneau
+  players.forEach((p,i)=>{ p.gulfStart = Math.round(i*24/n)%24; });
+
+  G={
+    players, n, opts,
+    gulf,
+    plastic:0,
+    round:1, cur:0,
+    deck:buildDeck(opts.cat),
+    weather:null,         // carte météo active du tour de table
+    rotThisTurn:1,
+    log:[],
+    pending:null,         // sous-flux interactif en cours
+    started:false,
+  };
+
+  // mise en place : placer bâtiments de départ
+  players.forEach(p=>{
+    placeBuilding(p,"0,0","habitation",2,true);
+    placeBuilding(p,"1,0","recyclage",1,true);
+    placeStartPawn(p,"0,1");
+    placeStartPawn(p,"-1,1");
+    if(opts.objectives){
+      // 3 objectifs piochés, on en garde 1 (auto, secret par joueur)
+      const pool=shuffle(OBJECTIVES.slice());
+      p.objective = pool[0];
+    }
+  });
+
+  G.started=true;
+  G.log.unshift("🌍 Début de la partie — "+n+" joueurs.");
+  startRound(true);
+}
+
+function placeBuilding(p,key,type,lvl,silent){
+  p.board[key]={kind:"building", type, lvl, usedProd:false, usedRecy:false};
+}
+function placeStartPawn(p,key){ p.board[key]={kind:"pawn"}; }
+
+/* deck d'événements : 18 météo (2 de chaque) + 6 catastrophe (si activées) + 9 "diplomatiques" simplifiées */
+const DIPLO=[
+  {id:"subv", ic:"🤝", name:"Subvention verte", desc:"Effet diplomatique : aucun (variante non détaillée dans le livret).", diplo:true},
+];
+function buildDeck(useCat){
+  let d=[];
+  WEATHER.forEach(w=>{ d.push({...w,cls:"weather"}); d.push({...w,cls:"weather"}); }); // 18
+  if(useCat) CATASTROPHE.forEach(c=>d.push({...c,cls:"catastrophe"}));                  // 6
+  // (cartes diplomatiques laissées de côté : effets non spécifiés dans le PDF)
+  return shuffle(d);
+}
+function drawEvent(){
+  if(G.deck.length===0) G.deck=buildDeck(G.opts.cat);
+  return G.deck.pop();
+}
+
+/* =========================================================================
+   HELPERS scoring / requêtes plateau
+   ========================================================================= */
+function allBuildings(p){return Object.values(p.board).filter(c=>c.kind==="building");}
+function cntType(p,t){return allBuildings(p).filter(b=>b.type===t).length;}
+function cntTypeLvl(p,t,l){return allBuildings(p).filter(b=>b.type===t&&b.lvl>=l).length;}
+function cntLvlNoHab(p,l){return allBuildings(p).filter(b=>b.type!=="habitation"&&b.lvl>=l).length;}
+function boardPollution(p){return Object.entries(p.board).filter(([k,c])=>c.kind==="pollution").map(([k,c])=>({k,...c}));}
+function buildingsByLvl(p){return allBuildings(p).filter(b=>b.lvl===3).length;}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+/* coûts payables ? */
+function canPay(p,cost){return Object.entries(cost||{}).every(([k,v])=>p.res[k]>=v);}
+function pay(p,cost){Object.entries(cost||{}).forEach(([k,v])=>p.res[k]-=v);}
+function costStr(cost){return Object.entries(cost||{}).map(([k,v])=>v+RES[k].ic).join(" ");}
+
+/* =========================================================================
+   TOUR DE TABLE / TOUR JOUEUR
+   ========================================================================= */
+function startRound(first){
+  if(first){
+    G.weather=null;
+    log("— Tour de table 1 —");
+  }else{
+    G.round++;
+    const ev=drawEvent();
+    G.weather=ev;
+    log("— Tour de table "+G.round+" —");
+    applyEventAtRoundStart(ev);
+    if(checkEnd()) return;
+  }
+  G.cur=0;
+  startTurn();
+}
+
+function applyEventAtRoundStart(ev){
+  log("🃏 "+ev.name+" — "+ev.desc, "ev");
+  if(ev.cls==="catastrophe"){
+    G.players.forEach(p=>applyCatastrophe(p,ev));
+  }
+  // lancers de dé (continent de plastique)
+  const rolls = ev.dice2?2:1;
+  for(let i=0;i<rolls;i++) rollDie();
+}
+
+function rollDie(){
+  const d=1+Math.floor(Math.random()*12);
+  let moved=0;
+  G.gulf.forEach(slot=>{
+    if(slot.num===d && slot.tokens.length){
+      moved+=slot.tokens.length;
+      slot.tokens=[];
+    }
+  });
+  G.plastic+=moved;
+  log("🎲 "+d+" → "+(moved?moved+" pollution vers le continent de plastique":"aucune pollution déplacée"));
+}
+
+function applyCatastrophe(p,ev){
+  // bâtiments candidats selon la cible de la carte
+  const candidates=[];
+  for(const [k,c] of Object.entries(p.board)){
+    if(c.kind!=="building") continue;
+    const [q,r]=k.split(",").map(Number);
+    if(ev.target.type && c.type!==ev.target.type) continue;
+    if(ev.target.pos==="center" && !(q===0&&r===0)) continue;
+    if(ev.target.pos==="coast" && r!==HEX_R) continue;
+    candidates.push({k,c});
+  }
+  if(!candidates.length) return;
+  candidates.sort((a,b)=>b.c.lvl-a.c.lvl); // toujours le plus haut niveau
+  const victim=candidates[0];
+  const lvl=victim.c.lvl;
+  p.board[victim.k]={kind:"pawn"};            // remplacé par 1 pion construction (règle p.4)
+  for(let i=0;i<lvl;i++) autoPlaceBoardPollution(p);
+  log("💥 "+p.name+" : "+B[victim.c.type].name+" Niv."+lvl+" détruit ("+ev.name+").");
+}
+
+function autoPlaceBoardPollution(p){
+  const elig=eligiblePollutionCells(p);
+  if(elig.length){ p.board[elig[0]]={kind:"pollution",lvl:1}; }
+  else {
+    // pas de place : escalade Niv.1 -> Niv.2 (règle simplifiée)
+    const l1=boardPollution(p).find(x=>x.lvl===1);
+    if(l1 && p.board[l1.k].lvl<3){ p.board[l1.k].lvl++; }
+  }
+}
+
+function startTurn(){
+  const p=cur();
+  p.didBuild=false; p.didProduce=false;
+  // reset utilisation bâtiments
+  allBuildings(p).forEach(b=>{b.usedProd=false;b.usedRecy=false;});
+
+  // 1) rotation gulf stream
+  let rot=1;
+  if(G.weather && G.weather.rot!==undefined) rot=G.weather.rot;
+  rotateGulf(rot);
+  if(rot===0) log("🧊 "+p.name+" : Gulf Stream immobilisé.");
+  else if(rot===2) log("🌊 "+p.name+" : Gulf Stream avance de 2 cases.");
+
+  // 2) taxe d'habitation
+  payHousingTax(p);
+
+  // bonus coopérative (variante 2) — non implémenté
+
+  render();
+  setHint(`<b>Tour de ${p.name}.</b> Faites vos actions (production, construction, recyclage), puis terminez.`);
+}
+
+function rotateGulf(steps){
+  for(let s=0;s<steps;s++){
+    // tourne les pollutions d'une case (les portions joueurs restent fixes)
+    const last=G.gulf[G.gulf.length-1].tokens;
+    for(let i=G.gulf.length-1;i>0;i--) G.gulf[i].tokens=G.gulf[i-1].tokens;
+    G.gulf[0].tokens=last;
+  }
+}
+
+function payHousingTax(p){
+  const tax=cntType(p,"habitation");
+  if(tax===0) return;
+  if(p.res.food>=tax){ p.res.food-=tax; log("🏠 "+p.name+" paie "+tax+"🍎 de taxe d'habitation."); }
+  else{
+    const deficit=tax-p.res.food; p.res.food=0;
+    log("⚠️ "+p.name+" : taxe impayée — "+deficit+" pollution placée(s).");
+    for(let i=0;i<deficit;i++) autoPlaceBoardPollution(p);
+  }
+}
+
+function endTurn(){
+  const p=cur();
+  // bonus "pas d'action"
+  if(!p.didBuild && !p.didProduce){ p.res.recy+=3; log("🌱 "+p.name+" n'a rien construit ni produit : +3 ♻️."); }
+  else{
+    if(!p.didBuild){ p.res.recy+=1; log("🌱 "+p.name+" n'a pas construit : +1 ♻️."); }
+    if(!p.didProduce){ p.res.recy+=1; log("🌱 "+p.name+" n'a pas produit : +1 ♻️."); }
+  }
+  G.pending=null;
+  G.cur++;
+  if(G.cur>=G.n){ // fin du tour de table
+    if(checkEnd()) return;
+    startRound(false);
+  }else{
+    startTurn();
+  }
+}
+
+function checkEnd(){
+  if(G.plastic>=30){ endGame("Le continent de plastique a atteint 30 pollutions."); return true; }
+  return false;
+}
+
+function cur(){return G.players[G.cur];}
+
+/* =========================================================================
+   ACTIONS — chaque action démarre un "pending" interactif
+   ========================================================================= */
+function setPending(obj){ G.pending=obj; render(); }
+function clearPending(){ G.pending=null; render(); }
+
+/* ---- PRODUCTION ---- */
+function startProduce(){
+  const p=cur();
+  const producers=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&B[c.type].produces&&!c.usedProd);
+  if(!producers.length){ setHint("Aucun bâtiment de production disponible (déjà utilisés ou non construits)."); return; }
+  setPending({mode:"produce"});
+  setHint("<b>Production.</b> Touchez une ferme, usine ou centrale (clignotante) pour produire. Chaque usage génère 1 pollution.");
+}
+function doProduce(p,key){
+  const c=p.board[key];
+  const def=B[c.type];
+  let qty=def.output[c.lvl];
+  // modificateur météo
+  if(G.weather && G.weather.mod && G.weather.mod[c.type]) qty=Math.max(0,qty+G.weather.mod[c.type]);
+  p.res[def.produces]+=qty;
+  c.usedProd=true; p.didProduce=true;
+  log("⚙️ "+p.name+" : "+def.name+" Niv."+c.lvl+" produit "+qty+RES[def.produces].ic+".");
+  // 1 pollution à placer
+  beginPollutionPlacement(p,1,"produce");
+}
+
+/* ---- CONSTRUCTION ---- */
+function startBuild(){
+  const p=cur();
+  setPending({mode:"build"});
+  const pawns=Object.values(p.board).filter(c=>c.kind==="pawn").length;
+  setHint(`<b>Construction.</b> Touchez un <b>pion construction</b> (${pawns}) pour bâtir, ou un bâtiment pour l'améliorer. Chaque action génère 1 pollution.`);
+}
+function openBuildMenu(p,key){
+  // construire sur un pion
+  const opts=Object.keys(B).map(type=>{
+    const cost=B[type].cost[1];
+    const ok=canPay(p,cost);
+    return {type, lvl:1, cost, ok, label:B[type].name, sub:"Niv.1 — "+(B[type].vp[1])+" P.v"};
+  });
+  showChoiceModal({
+    title:"Construire un bâtiment",
+    sub:"Remplace ce pion construction. Coût payé en ressources.",
+    items:opts.map(o=>({
+      ic:B[o.type].ic, color:B[o.type].color, title:o.label, sub:o.sub,
+      cost:costStr(o.cost), ok:o.ok,
+      onPick:()=>{ buildOnPawn(p,key,o.type); }
+    })),
+  });
+}
+function buildOnPawn(p,key,type){
+  const cost=B[type].cost[1];
+  if(!canPay(p,cost)) return;
+  pay(p,cost);
+  placeBuilding(p,key,type,1);
+  p.didBuild=true;
+  log("🏗️ "+p.name+" construit "+B[type].name+" Niv.1.");
+  closeModal();
+  // habitation -> pions construction
+  if(type==="habitation") grantPawns(p,1);
+  beginPollutionPlacement(p,1,"build");
+}
+function openUpgradeMenu(p,key){
+  const c=p.board[key];
+  const type=c.type;
+  if(c.lvl>=3){ setHint(B[type].name+" est déjà au niveau maximum."); return; }
+  const items=[];
+  for(let target=c.lvl+1; target<=3; target++){
+    // coût cumulé du niveau c.lvl+1 .. target
+    let cost={};
+    for(let l=c.lvl+1;l<=target;l++) for(const [k,v] of Object.entries(B[type].cost[l])) cost[k]=(cost[k]||0)+v;
+    let ok=canPay(p,cost);
+    let reqTxt="";
+    if(type==="recyclage"){
+      const need=B.recyclage.reqRecy[target];
+      if(need && p.res.recy<need){ ok=false; reqTxt=" • requiert "+need+"♻️ en réserve"; }
+    }
+    items.push({
+      ic:B[type].ic,color:B[type].color,
+      title:"Améliorer en Niv."+target,
+      sub:B[type].vp[target]+" P.v"+reqTxt,
+      cost:costStr(cost), ok,
+      onPick:()=>{ upgradeTo(p,key,target); }
+    });
+  }
+  showChoiceModal({title:"Améliorer "+B[type].name,sub:"Payez le coût cumulé du niveau visé.",items});
+}
+function upgradeTo(p,key,target){
+  const c=p.board[key], type=c.type, from=c.lvl;
+  let cost={};
+  for(let l=from+1;l<=target;l++) for(const [k,v] of Object.entries(B[type].cost[l])) cost[k]=(cost[k]||0)+v;
+  if(!canPay(p,cost)) return;
+  if(type==="recyclage" && B.recyclage.reqRecy[target] && p.res.recy<B.recyclage.reqRecy[target]) return;
+  pay(p,cost);
+  c.lvl=target; p.didBuild=true;
+  log("⬆️ "+p.name+" : "+B[type].name+" Niv."+from+" → Niv."+target+".");
+  closeModal();
+  if(type==="habitation") grantPawns(p, target); // pions = niveau atteint (livret p.5)
+  beginPollutionPlacement(p,1,"build");
+}
+function grantPawns(p,count){
+  // place chaque pion sur case vide adjacente à bâtiment/pion ; sinon réserve
+  let placed=0, toReserve=0;
+  for(let i=0;i<count;i++){
+    const elig=eligiblePawnCells(p);
+    if(elig.length){ p.board[elig[0]]={kind:"pawn"}; placed++; }
+    else { p.reservePawns++; toReserve++; }
+  }
+  if(placed) log("👷 "+p.name+" reçoit "+placed+" pion(s) construction.");
+  if(toReserve) log("📦 "+p.name+" : "+toReserve+" pion(s) en réserve (plateau saturé).");
+}
+function eligiblePawnCells(p){
+  // case vide adjacente à un bâtiment ou un pion
+  const occ=new Set(Object.entries(p.board).filter(([k,c])=>c.kind==="building"||c.kind==="pawn").map(([k])=>k));
+  return Object.entries(p.board).filter(([k,c])=>{
+    if(c.kind!=="empty") return false;
+    const [q,r]=k.split(",").map(Number);
+    return neighborsKeys(q,r).some(nk=>occ.has(nk));
+  }).map(([k])=>k);
+}
+
+/* ---- POLLUTION (placement interactif) ---- */
+function beginPollutionPlacement(p,count,origin){
+  G.pending={mode:"placePollution", remaining:count, origin};
+  render();
+  setHint(`<b>Placez ${count} pollution.</b> Touchez une case de <b>votre Gulf Stream</b> (niveau au choix) ou une case <b>libre adjacente à un bâtiment</b> (Niv.1).`);
+}
+function eligiblePollutionCells(p){
+  const occ=new Set(Object.entries(p.board).filter(([k,c])=>c.kind==="building").map(([k])=>k));
+  return Object.entries(p.board).filter(([k,c])=>{
+    if(c.kind!=="empty") return false;
+    const [q,r]=k.split(",").map(Number);
+    return neighborsKeys(q,r).some(nk=>occ.has(nk));
+  }).map(([k])=>k);
+}
+function placePollutionOnBoard(p,key){
+  if(!G.pending||G.pending.mode!=="placePollution") return;
+  p.board[key]={kind:"pollution",lvl:1};
+  log("☁️ "+p.name+" place 1 pollution Niv.1 sur son plateau.");
+  afterPollutionPlaced(p);
+}
+function placePollutionOnGulf(slotIdx,lvl){
+  const p=cur();
+  if(!G.pending||G.pending.mode!=="placePollution") return;
+  const slot=G.gulf[slotIdx];
+  if(slot.tokens.length>=3){ setHint("Cette case du Gulf Stream est pleine (max 3)."); return; }
+  slot.tokens.push(lvl);
+  log("🌊 "+p.name+" place 1 pollution Niv."+lvl+" sur le Gulf Stream.");
+  afterPollutionPlaced(p);
+}
+function afterPollutionPlaced(p){
+  G.pending.remaining--;
+  if(G.pending.remaining<=0){ G.pending=null; setHint("Pollution placée. Continuez vos actions ou terminez le tour."); render(); }
+  else{ render(); setHint(`Encore ${G.pending.remaining} pollution à placer.`); }
+}
+
+/* ---- RECYCLAGE ---- */
+function startRecycle(){
+  const p=cur();
+  const centers=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy);
+  if(!centers.length){ setHint("Aucun centre de recyclage disponible."); return; }
+  setPending({mode:"recycleSelect"});
+  setHint("<b>Recyclage.</b> Touchez un <b>centre de recyclage</b> (clignotant) à activer.");
+}
+function selectRecycleCenter(p,key){
+  const c=p.board[key];
+  const cap=B.recyclage.recyCap[c.lvl];
+  G.pending={mode:"recycleRun", center:key, cap, picked:[], gulfPicked:0, removedGulf:[], removedBoard:[]};
+  render();
+  setHint(`<b>Recyclage (Niv.${c.lvl}, capacité ${cap}).</b> Touchez la pollution à recycler : votre Gulf Stream (rapporte des ♻️) ou la pollution <b>adjacente</b> au centre. Validez ensuite.`);
+}
+function recycleGulfToken(slotIdx){
+  const p=cur(), pe=G.pending;
+  if(!pe||pe.mode!=="recycleRun") return;
+  if(pe.picked.length>=pe.cap){ setHint("Capacité atteinte."); return; }
+  if(!isMyGulfSlot(p,slotIdx)){ setHint("Vous ne pouvez recycler que votre portion du Gulf Stream."); return; }
+  const slot=G.gulf[slotIdx];
+  if(!slot.tokens.length){ return; }
+  const lvl=slot.tokens.pop();
+  pe.removedGulf.push({idx:slotIdx,lvl});
+  pe.picked.push({src:"gulf"}); pe.gulfPicked++;
+  render(); updateRecycleHint();
+}
+function recycleBoardToken(key){
+  const p=cur(), pe=G.pending;
+  if(!pe||pe.mode!=="recycleRun") return;
+  if(pe.picked.length>=pe.cap){ setHint("Capacité atteinte."); return; }
+  const [cq,cr]=pe.center.split(",").map(Number);
+  if(!neighborsKeys(cq,cr).includes(key)){ setHint("Cette pollution n'est pas adjacente au centre."); return; }
+  if(p.board[key].kind!=="pollution") return;
+  pe.removedBoard.push({key, lvl:p.board[key].lvl});
+  p.board[key]={kind:"empty"};
+  pe.picked.push({src:"board"});
+  render(); updateRecycleHint();
+}
+function isMyGulfSlot(p,idx){
+  for(let k=0;k<3;k++){ if((p.gulfStart+k)%24===idx) return true; }
+  return false;
+}
+function updateRecycleHint(){
+  const pe=G.pending;
+  setHint(`Sélectionné : ${pe.picked.length}/${pe.cap} (dont ${pe.gulfPicked} du Gulf Stream → ♻️).` +
+    `<div class="mini"><button onclick="confirmRecycle()">Valider le recyclage</button>` +
+    `<button class="ghost" onclick="cancelRecycle()">Annuler</button></div>`);
+}
+function cancelRecycle(){
+  const pe=G.pending; const p=cur();
+  if(pe&&pe.mode==="recycleRun"){
+    pe.removedGulf.forEach(g=>{ if(G.gulf[g.idx].tokens.length<3) G.gulf[g.idx].tokens.push(g.lvl); });
+    pe.removedBoard.forEach(b=>{ if(p.board[b.key].kind==="empty") p.board[b.key]={kind:"pollution",lvl:b.lvl}; });
+  }
+  clearPending(); setHint("Recyclage annulé.");
+}
+function confirmRecycle(){
+  const p=cur(), pe=G.pending;
+  if(!pe||pe.mode!=="recycleRun") return;
+  if(pe.picked.length===0){ setHint("Sélectionnez au moins une pollution, ou annulez."+
+    `<div class="mini"><button class="ghost" onclick="cancelRecycle()">Annuler</button></div>`); return; }
+  const c=p.board[pe.center];
+  c.usedRecy=true;
+  const pts=pe.gulfPicked;
+  p.res.recy+=pts;
+  const gain=B.recyclage.gainRes[c.lvl];
+  if(gain>0){
+    G.pending=null;
+    askResourceGain(p,gain,pts,pe.picked.length);
+    return;
+  }
+  log(`♻️ ${p.name} recycle ${pe.picked.length} pollution(s) (+${pts}♻️).`);
+  G.pending=null; render();
+  setHint("Recyclage effectué. Continuez ou terminez le tour.");
+}
+function askResourceGain(p,gain,pts,total){
+  // choisir gain énergie/MP, "gain" fois
+  let remaining=gain, chosen=[];
+  function step(){
+    if(remaining<=0){
+      chosen.forEach(r=>p.res[r]++);
+      log(`♻️ ${p.name} recycle ${total} pollution(s) (+${pts}♻️, +${chosen.map(r=>RES[r].ic).join("")}).`);
+      closeModal(); render(); setHint("Recyclage effectué. Continuez ou terminez le tour.");
+      return;
+    }
+    showChoiceModal({
+      title:"Ressource récupérée",
+      sub:`Centre de recyclage : choisissez une ressource (${gain-remaining+1}/${gain}).`,
+      items:[
+        {ic:"⚡",color:"#e8b13a",title:"Énergie",sub:"+1 énergie",cost:"",ok:true,onPick:()=>{chosen.push("energy");remaining--;step();}},
+        {ic:"🪵",color:"#8a6d4b",title:"Matière première",sub:"+1 MP",cost:"",ok:true,onPick:()=>{chosen.push("raw");remaining--;step();}},
+      ],
+      noCancel:true,
+    });
+  }
+  step();
+}
+
+/* ---- ÉCHANGE (accord commercial) ---- */
+function startTrade(){
+  const p=cur();
+  if(G.n<2) return;
+  showTradeModal(p);
+}
+
+/* =========================================================================
+   RENDER
+   ========================================================================= */
+function $(id){return document.getElementById(id);}
+function log(msg,cls){ G.log.unshift((cls==="ev"||cls==="me"?msg:msg)); if(G.log.length>120)G.log.pop(); }
+
+function render(){
+  if(!G||!G.started) return;
+  const p=cur();
+  // topbar
+  $("round-n").textContent="Tour de table "+G.round;
+  $("phase-mini").textContent=G.pending?phaseLabel(G.pending.mode):"Au tour de "+p.name;
+  if(G.weather){
+    $("event-ico").textContent=G.weather.ic;
+    $("event-name").textContent=G.weather.name;
+    $("event-desc").textContent=G.weather.desc;
+  }else{
+    $("event-ico").textContent="🌤️"; $("event-name").textContent="Premier tour"; $("event-desc").textContent="Pas de carte au tour 1.";
+  }
+  $("plastic-n").textContent=G.plastic;
+  $("plastic-bar").style.width=Math.min(100,G.plastic/30*100)+"%";
+
+  // player head
+  $("p-dot").style.background=p.color;
+  $("p-name").textContent=p.name;
+  $("p-turn").textContent="à jouer";
+  // resources
+  $("res-row").innerHTML=RES_ORDER.map(k=>`<div class="res"><span class="ic">${RES[k].ic}</span>${p.res[k]}<small>${RES[k].label}</small></div>`).join("")
+    + `<div class="res"><span class="ic">📦</span>${countPawns(p)}<small>Pions constr.</small></div>`;
+
+  renderBoard(p);
+  renderGulf(p);
+  renderOthers();
+  renderObjective(p);
+  renderLegend();
+  renderLog();
+  syncActionButtons();
+}
+function countPawns(p){return Object.values(p.board).filter(c=>c.kind==="pawn").length + p.reservePawns;}
+function phaseLabel(m){return {produce:"Production",build:"Construction",recycleSelect:"Recyclage",recycleRun:"Recyclage",placePollution:"Placer la pollution"}[m]||"";}
+
+function renderBoard(p){
+  const svg=$("board");
+  const pe=G.pending;
+  const eligPoll = (pe&&pe.mode==="placePollution")? new Set(eligiblePollutionCells(p)) : new Set();
+  const eligBuild = (pe&&pe.mode==="build");
+  const recRun = (pe&&pe.mode==="recycleRun")? pe : null;
+  let recBoardElig=new Set();
+  if(recRun){ const [cq,cr]=recRun.center.split(",").map(Number); recBoardElig=new Set(neighborsKeys(cq,cr).filter(k=>p.board[k].kind==="pollution")); }
+  const recSelect = (pe&&pe.mode==="recycleSelect");
+
+  let html="";
+  CELLS.forEach(cell=>{
+    const {x,y}=hexPixel(cell.q,cell.r);
+    const c=p.board[cell.key];
+    let cls="hexcell cell-empty", fill="";
+    let extra="";
+    if(c.kind==="building"){
+      const def=B[c.type];
+      fill=`fill="${def.color}"`;
+      cls="hexcell";
+      extra=`<text class="cellico" x="${x}" y="${y-4}">${def.ic}</text>`+
+            `<g class="lvlbadge"><circle cx="${x+18}" cy="${y+18}" r="11" fill="#0e2a2e"/><text x="${x+18}" y="${y+18}" class="cellico" style="font-size:13px;font-weight:800;fill:#fff">${c.lvl}</text></g>`;
+      if(c.type==="centrale") extra=`<text class="cellico" x="${x}" y="${y-4}" style="fill:#1d2b2e">${def.ic}</text>`+extra.split("</text>").slice(1).join("</text>");
+    }else if(c.kind==="pawn"){
+      fill=`fill="#e8b13a"`; cls="hexcell";
+      extra=`<text class="cellico" x="${x}" y="${y}" style="fill:#3a2a05">👷</text>`;
+    }else if(c.kind==="pollution"){
+      fill=`fill="rgba(255,255,255,.08)"`; cls="hexcell";
+      extra=pollutionGlyph(x,y,c.lvl);
+    }else{
+      // empty
+    }
+    // surbrillances
+    if(eligBuild && (c.kind==="pawn"||c.kind==="building")) cls+=" cell-elig";
+    if(eligPoll.has(cell.key)) cls+=" cell-elig";
+    if(recBoardElig.has(cell.key)) cls+=" cell-recyc-src";
+    if(recSelect && c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy) cls+=" cell-elig";
+
+    html+=`<polygon class="${cls}" ${fill} points="${hexPoints(x,y,HEX_SIZE*0.92)}" data-key="${cell.key}"></polygon>${extra}`;
+  });
+  svg.innerHTML=html;
+  // events
+  svg.querySelectorAll("polygon[data-key]").forEach(el=>{
+    el.onclick=()=>onBoardClick(el.getAttribute("data-key"));
+  });
+  $("board-sub").textContent="";
+}
+function pollutionGlyph(x,y,lvl){
+  const col=lvl===1?"#d9d2c4":lvl===2?"#b7ad97":"#8f8567";
+  return `<g class="pollchip"><circle cx="${x}" cy="${y}" r="15" fill="${col}" stroke="#5b5340" stroke-width="2"/><text x="${x}" y="${y}" class="cellico" style="font-size:14px;font-weight:800;fill:#3a3320">${lvl}</text></g>`;
+}
+
+function renderGulf(p){
+  const svg=$("gulf");
+  const cx=180,cy=180,R=140,r=20;
+  const pe=G.pending;
+  const placing=(pe&&pe.mode==="placePollution");
+  const recRun=(pe&&pe.mode==="recycleRun")?pe:null;
+  let html="";
+  // anneau
+  html+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="40"/>`;
+  // continent de plastique
+  html+=`<circle cx="${cx}" cy="${cy}" r="64" fill="rgba(217,195,154,.18)" stroke="${'#b89a63'}" stroke-width="2"/>`;
+  html+=`<text x="${cx}" y="${cy-8}" text-anchor="middle" style="font-size:13px;fill:#e7d8b6;font-weight:800">Plastique</text>`;
+  html+=`<text x="${cx}" y="${cy+14}" text-anchor="middle" style="font-size:18px;fill:#fff;font-weight:900">${G.plastic}</text>`;
+  html+=`<text x="${cx}" y="${cy+30}" text-anchor="middle" style="font-size:10px;fill:#cbbf9b">/ 30</text>`;
+
+  for(let i=0;i<24;i++){
+    const a=(-90 + i*15)*Math.PI/180;
+    const x=cx+R*Math.cos(a), y=cy+R*Math.sin(a);
+    const slot=G.gulf[i];
+    const mine=isMyGulfSlot(p,i);
+    let cls="slot";
+    if(mine) cls+=" mine";
+    if(placing && mine && slot.tokens.length<3) cls+=" elig";
+    if(recRun && mine && slot.tokens.length>0) cls+=" elig";
+    const fill = slot.tokens.length? "#c9bfa4" : "rgba(0,0,0,.18)";
+    const stroke = mine? "#fff" : "rgba(255,255,255,.25)";
+    html+=`<circle class="${cls}" cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${mine?2.5:1.2}" data-slot="${i}" style="cursor:${(placing&&mine)||(recRun&&mine)?'pointer':'default'}"/>`;
+    if(slot.tokens.length){
+      html+=`<text x="${x}" y="${y-2}" text-anchor="middle" style="font-size:13px;font-weight:900;fill:#3a3320">${slot.tokens.length}</text>`;
+      html+=`<text x="${x}" y="${y+11}" text-anchor="middle" style="font-size:8px;fill:#6b6248">${slot.tokens.join("·")}</text>`;
+    }else{
+      html+=`<text x="${x}" y="${y+3}" text-anchor="middle" style="font-size:9px;fill:rgba(255,255,255,.35)">${slot.num}</text>`;
+    }
+    // marqueur joueur
+    if(mine){
+      const px=cx+(R+30)*Math.cos(a), py=cy+(R+30)*Math.sin(a);
+      // afficher pastille couleur seulement sur la 1re case de chaque portion
+      if((i)===(p.gulfStart)) {
+        html+=`<circle cx="${px}" cy="${py}" r="5" fill="${p.color}"/>`;
+      }
+    }
+  }
+  svg.innerHTML=html;
+  svg.querySelectorAll("circle[data-slot]").forEach(el=>{
+    el.onclick=()=>onGulfClick(parseInt(el.getAttribute("data-slot")));
+  });
+}
+
+function renderOthers(){
+  $("others").innerHTML=G.players.map((p,i)=>{
+    const vp=quickVP(p);
+    const me=i===G.cur?' style="outline:2px solid '+p.color+'"':'';
+    return `<div class="opill"${me}><span class="d" style="background:${p.color}"></span>${p.name} · ${vp} P.v · ${p.res.recy}♻️</div>`;
+  }).join("");
+}
+function quickVP(p){
+  let v=0; allBuildings(p).forEach(b=>v+=B[b.type].vp[b.lvl]); v+=p.res.recy*2;
+  boardPollution(p).forEach(pp=>v+=POLL_PENALTY[pp.lvl]);
+  return v;
+}
+
+function renderObjective(p){
+  if(!G.opts.objectives||!p.objective){ $("obj-card").classList.add("hidden"); return; }
+  $("obj-card").classList.remove("hidden");
+  const o=p.objective; const ok=o.check(p);
+  $("obj-body").innerHTML=`<b>${o.name}</b> — <span style="color:${ok?'#7fe0b0':'#e8b13a'}">${o.vp} P.v</span><br>${o.desc}<br><small style="color:${ok?'#7fe0b0':'#bcd6d2'}">${ok?'✓ rempli pour l’instant':'en cours…'}</small>`;
+}
+
+function renderLegend(){
+  $("legend").innerHTML=Object.entries(B).map(([t,d])=>
+    `<div class="lg"><span class="sw" style="background:${d.color}"></span>${d.ic} ${d.name}</div>`
+  ).join("");
+}
+function renderLog(){
+  $("log").innerHTML=G.log.slice(0,40).map(l=>`<div>${l}</div>`).join("");
+}
+
+function syncActionButtons(){
+  const pe=G.pending;
+  const busy=m=>pe&&pe.mode===m;
+  $("act-produce").classList.toggle("busy",busy("produce"));
+  $("act-build").classList.toggle("busy",busy("build"));
+  $("act-recycle").classList.toggle("busy",busy("recycleSelect")||busy("recycleRun"));
+  const lock = pe&&pe.mode==="placePollution";
+  const notMyTurn = NET.online && G.cur!==NET.seat;
+  ["act-produce","act-build","act-recycle","act-trade","act-end"].forEach(id=>$(id).disabled=!!lock||notMyTurn);
+  if(NET.online){
+    if(notMyTurn){ $("p-turn").textContent="tour de "+cur().name+" — observez"; }
+    else{ $("p-turn").textContent="à vous de jouer"; }
+  }
+}
+
+/* =========================================================================
+   CLICKS
+   ========================================================================= */
+function onBoardClick(key){
+  if(NET.online && G.cur!==NET.seat) return; // pas votre tour : lecture seule
+  const p=cur(), c=p.board[key], pe=G.pending;
+  if(!pe){ // pas d'action active : info légère
+    if(c.kind==="building") setHint(`${B[c.type].ic} ${B[c.type].name} Niv.${c.lvl} — ${B[c.type].desc}`);
+    return;
+  }
+  if(pe.mode==="build"){
+    if(c.kind==="pawn") openBuildMenu(p,key);
+    else if(c.kind==="building") openUpgradeMenu(p,key);
+    else setHint("Touchez un pion construction (bâtir) ou un bâtiment (améliorer).");
+  }else if(pe.mode==="produce"){
+    if(c.kind==="building"&&B[c.type].produces&&!c.usedProd) doProduce(p,key);
+    else setHint("Touchez une ferme, usine ou centrale non encore utilisée.");
+  }else if(pe.mode==="placePollution"){
+    if(eligiblePollutionCells(p).includes(key)) placePollutionOnBoard(p,key);
+    else setHint("Case invalide : il faut une case libre adjacente à un bâtiment.");
+  }else if(pe.mode==="recycleSelect"){
+    if(c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy) selectRecycleCenter(p,key);
+    else setHint("Touchez un centre de recyclage disponible.");
+  }else if(pe.mode==="recycleRun"){
+    if(c.kind==="pollution") recycleBoardToken(key);
+  }
+}
+function onGulfClick(idx){
+  if(NET.online && G.cur!==NET.seat) return; // pas votre tour : lecture seule
+  const p=cur(), pe=G.pending;
+  if(!pe) return;
+  if(pe.mode==="placePollution"){
+    if(!isMyGulfSlot(p,idx)){ setHint("Placez la pollution sur VOTRE portion (encadrée de blanc)."); return; }
+    // choisir le niveau
+    showLevelChooser(idx);
+  }else if(pe.mode==="recycleRun"){
+    recycleGulfToken(idx);
+  }
+}
+
+/* =========================================================================
+   UI : hint, modales
+   ========================================================================= */
+function setHint(html){ $("hint").innerHTML=html; }
+
+function showLevelChooser(slotIdx){
+  showChoiceModal({
+    title:"Niveau de la pollution",
+    sub:"Sur le Gulf Stream, vous choisissez librement le niveau du pion.",
+    items:[1,2,3].map(l=>({
+      ic:l, color:l===1?"#d9d2c4":l===2?"#b7ad97":"#8f8567",
+      title:"Niveau "+l, sub:"Pénalité éventuelle "+POLL_PENALTY[l]+" P.v si non recyclée",
+      cost:"", ok:true, onPick:()=>{ closeModal(); placePollutionOnGulf(slotIdx,l); }
+    })),
+  });
+}
+
+function showChoiceModal({title,sub,items,noCancel}){
+  const mount=$("modal-mount");
+  mount.innerHTML=`<div class="modal"><div class="sheet">
+    <h2>${title}</h2><p class="sub">${sub||""}</p>
+    <div class="choices">${items.map((it,i)=>`
+      <button class="choice" data-i="${i}" ${it.ok?'':'disabled'}>
+        <span class="ci" style="background:${it.color}">${it.ic}</span>
+        <span class="cb"><b>${it.title}</b><small>${it.sub||""}</small></span>
+        <span class="cost ${it.ok?'':'ko'}">${it.cost||""}</span>
+      </button>`).join("")}</div>
+    ${noCancel?'':'<div class="closebar"><button id="modal-cancel">Annuler</button></div>'}
+  </div></div>`;
+  items.forEach((it,i)=>{
+    const b=mount.querySelector(`.choice[data-i="${i}"]`);
+    if(it.ok) b.onclick=it.onPick;
+  });
+  if(!noCancel) $("modal-cancel").onclick=closeModal;
+}
+function closeModal(){ $("modal-mount").innerHTML=""; }
+
+function showTradeModal(p){
+  const others=G.players.filter(q=>q!==p);
+  const mount=$("modal-mount");
+  mount.innerHTML=`<div class="modal"><div class="sheet">
+    <h2>Accord commercial 🤝</h2>
+    <p class="sub">Donnez librement des ressources à un autre joueur (sans contrainte). Les contreparties se négocient à voix haute.</p>
+    <div class="field"><label style="font-size:12px;color:#bcd6d2">Donner à</label>
+      <select id="tr-to" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,.2);color:#fff;border:1px solid var(--line)">
+        ${others.map(q=>`<option value="${q.i}">${q.name}</option>`).join("")}
+      </select></div>
+    <div class="field"><label style="font-size:12px;color:#bcd6d2">Ressource</label>
+      <div class="seg" id="tr-res">
+        ${["food","energy","raw"].map((k,i)=>`<button data-k="${k}" class="${i===0?'on':''}">${RES[k].ic} ${RES[k].label}</button>`).join("")}
+      </div></div>
+    <div class="field"><label style="font-size:12px;color:#bcd6d2">Quantité</label>
+      <input id="tr-qty" type="number" min="1" value="1" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,.2);color:#fff;border:1px solid var(--line)"></div>
+    <div class="closebar"><button id="tr-cancel">Fermer</button><button id="tr-do" style="background:#fff;color:#0e2a2e">Donner</button></div>
+  </div></div>`;
+  let chosen="food";
+  mount.querySelectorAll("#tr-res button").forEach(b=>b.onclick=()=>{
+    mount.querySelectorAll("#tr-res button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); chosen=b.getAttribute("data-k");
+  });
+  $("tr-cancel").onclick=closeModal;
+  $("tr-do").onclick=()=>{
+    const to=G.players[+$("tr-to").value];
+    const qty=Math.max(1,parseInt($("tr-qty").value)||1);
+    if(p.res[chosen]<qty){ alert("Pas assez de "+RES[chosen].label+"."); return; }
+    p.res[chosen]-=qty; to.res[chosen]+=qty;
+    log(`🤝 ${p.name} donne ${qty}${RES[chosen].ic} à ${to.name}.`);
+    closeModal(); render();
+  };
+}
+
+/* =========================================================================
+   FIN DE PARTIE
+   ========================================================================= */
+function endGame(reason){
+  G.over=true; G.overReason=reason;
+  const results=G.players.map(p=>{
+    let bld=0; allBuildings(p).forEach(b=>bld+=B[b.type].vp[b.lvl]);
+    const recy=p.res.recy*2;
+    let pollPen=0; boardPollution(p).forEach(pp=>pollPen+=POLL_PENALTY[pp.lvl]);
+    let obj=0, objName="";
+    if(G.opts.objectives && p.objective && p.objective.check(p)){ obj=p.objective.vp; objName=p.objective.name; }
+    const total=bld+recy+obj+pollPen;
+    return {p, bld, recy, obj, objName, pollPen, total};
+  }).sort((a,b)=>b.total-a.total);
+
+  $("win-line").textContent="🏆 "+results[0].p.name+" l'emporte avec "+results[0].total+" P.v !";
+  $("end-reason").textContent=reason;
+  $("scores").innerHTML=results.map((r,i)=>`
+    <div class="score-row ${i===0?'first':''}">
+      <span class="rk">${i+1}</span>
+      <span class="d" style="width:12px;height:12px;border-radius:50%;background:${r.p.color}"></span>
+      <div style="flex:1">
+        <div class="nm">${r.p.name}</div>
+        <div class="brk">Bâtiments ${r.bld} · Recyclage +${r.recy} ${r.obj?`· Objectif (${r.objName}) +${r.obj}`:''} · Pollution ${r.pollPen}</div>
+      </div>
+      <span class="pts">${r.total}</span>
+    </div>`).join("");
+
+  $("game").classList.add("hidden");
+  $("online").classList.add("hidden");
+  $("end").classList.remove("hidden");
+  window.scrollTo(0,0);
+  NET.endShown=true;
+  netPush();
+}
+
+/* =========================================================================
+   SETUP WIRING
+   ========================================================================= */
+let setupCount=3;
+function renderNames(){
+  const wrap=$("names"); wrap.innerHTML="";
+  for(let i=0;i<setupCount;i++){
+    const inp=document.createElement("input");
+    inp.placeholder="Joueur "+(i+1);
+    inp.value=inp.value||"";
+    inp.id="nm-"+i;
+    wrap.appendChild(inp);
+  }
+}
+$("seg-count").querySelectorAll("button").forEach(b=>{
+  b.onclick=()=>{
+    $("seg-count").querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on"); setupCount=+b.getAttribute("data-n"); renderNames();
+  };
+});
+renderNames();
+
+$("btn-start").onclick=()=>{
+  const names=[];
+  for(let i=0;i<setupCount;i++) names.push($("nm-"+i).value||("Joueur "+(i+1)));
+  const opts={ names, objectives:$("opt-obj").checked, cat:$("opt-cat").checked, objectivesOn:$("opt-obj").checked };
+  opts.objectives=$("opt-obj").checked;
+  $("setup").classList.add("hidden");
+  $("game").classList.remove("hidden");
+  initGame(opts);
+};
+$("btn-again").onclick=()=>location.reload();
+
+/* action buttons */
+$("act-produce").onclick=()=>{ if(G.pending&&G.pending.mode==="produce"){clearPending();setHint("Production interrompue.");}else startProduce(); };
+$("act-build").onclick=()=>{ if(G.pending&&G.pending.mode==="build"){clearPending();setHint("Construction interrompue.");}else startBuild(); };
+$("act-recycle").onclick=()=>{ if(G.pending&&(G.pending.mode==="recycleSelect")){clearPending();setHint("Recyclage interrompu.");}else startRecycle(); };
+$("act-trade").onclick=()=>startTrade();
+$("act-end").onclick=()=>{ if(G.pending&&G.pending.mode==="placePollution"){setHint("Placez d'abord la pollution en attente.");return;} closeModal(); endTurn(); };
+
+// expose pour les boutons inline du hint
+window.confirmRecycle=confirmRecycle;
+window.cancelRecycle=cancelRecycle;
+
+/* =========================================================================
+   COUCHE RÉSEAU — Playroom Kit (lobby + QR + synchro tour par tour)
+   Modèle : le joueur actif fait jouer la logique localement et diffuse tout
+   l'état G ; les autres appareils le reçoivent et réaffichent (lecture seule).
+   ========================================================================= */
+
+/* ⚠️ À RENSEIGNER : créez une partie gratuite sur https://dev.joinplayroom.com
+   puis collez ici son identifiant. Laissé vide = mode développement Playroom. */
+const PLAYROOM_GAME_ID = "";
+
+var NET = { online:false, seat:null, myId:null, players:[], applyingRemote:false, endShown:false, pollTimer:null };
+
+function showGameScreen(){ ["setup","online","end"].forEach(id=>$(id).classList.add("hidden")); $("game").classList.remove("hidden"); }
+function showLobbyScreen(){ ["setup","game","end"].forEach(id=>$(id).classList.add("hidden")); $("online").classList.remove("hidden"); }
+
+/* ---- sérialisation : JSON perd la fonction objective.check ; on la restaure ---- */
+function netEncode(){ return JSON.parse(JSON.stringify(G)); }
+function netDecode(g){
+  if(g && g.players){
+    g.players.forEach(p=>{
+      if(p.objective && p.objective.id){
+        const full=OBJECTIVES.find(o=>o.id===p.objective.id);
+        if(full) p.objective=full;
+      }
+    });
+  }
+  return g;
+}
+
+/* ---- diffusion / réception de l'état ---- */
+function netPush(){
+  if(!NET.online || NET.applyingRemote || !G || !window.Playroom) return;
+  try{ G.__v=(G.__v||0)+1; window.Playroom.setState("G", netEncode(), true); }
+  catch(e){ console.warn("setState échec", e); }
+}
+function netPoll(){
+  if(!NET.online || !window.Playroom) return;
+  let remote; try{ remote=window.Playroom.getState("G"); }catch(e){ return; }
+  if(!remote) return;
+  const rv=remote.__v||0, lv=(G&&G.__v)||-1;
+  if(rv>lv) netApply(remote);
+}
+function netApply(remote){
+  NET.applyingRemote=true;
+  try{
+    G=netDecode(remote);
+    NET.seat=(G.opts&&G.opts.seats&&typeof G.opts.seats[NET.myId]==="number")?G.opts.seats[NET.myId]:null;
+    if(G.over){ if(!NET.endShown){ endGame(G.overReason); } }
+    else { showGameScreen(); render(); }
+  } finally { NET.applyingRemote=false; }
+}
+function startPolling(){ if(!NET.pollTimer) NET.pollTimer=setInterval(netPoll,120); }
+
+/* ---- lobby ---- */
+function lobbyError(msg){
+  $("lobby-connecting").classList.add("hidden");
+  $("lobby-main").classList.remove("hidden");
+  const e=$("lobby-error"); e.classList.remove("hidden"); e.textContent=msg;
+}
+function setupLobbyUI(){
+  const code=(window.Playroom.getRoomCode&&window.Playroom.getRoomCode())||"";
+  const url=window.location.href;
+  $("room-code").textContent=code||"——";
+  $("room-link").textContent=url;
+  $("room-qr").src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data="+encodeURIComponent(url);
+  $("btn-copy").onclick=()=>{ try{ navigator.clipboard.writeText(url); $("btn-copy").textContent="Lien copié ✓"; }catch(e){} };
+}
+function profName(pl,i){ const pr=pl.getProfile?pl.getProfile():{}; return (pr.name||("Joueur "+(i+1))).slice(0,16); }
+function renderLobbyPlayers(){
+  $("lobby-count").textContent=NET.players.length;
+  $("lobby-players").innerHTML=NET.players.map((pl,i)=>{
+    const col=PCOLORS[i]||"#888";
+    return `<div class="opill"><span class="d" style="background:${col}"></span>${profName(pl,i)}${pl.id===NET.myId?' (vous)':''}</div>`;
+  }).join("");
+  if(window.Playroom.isHost()){
+    const enough=NET.players.length>=2;
+    $("btn-launch").disabled=!enough;
+    $("lobby-hint").textContent=enough?"Prêt — vous pouvez démarrer.":"Il faut au moins 2 joueurs connectés.";
+  }
+}
+function handlePlayerJoin(state){
+  if(!NET.players.find(p=>p.id===state.id)) NET.players.push(state);
+  renderLobbyPlayers();
+  state.onQuit(()=>{ NET.players=NET.players.filter(p=>p.id!==state.id); renderLobbyPlayers(); });
+}
+function netOnConnected(){
+  NET.online=true;
+  NET.myId=window.Playroom.myPlayer().id;
+  $("lobby-connecting").classList.add("hidden");
+  $("lobby-main").classList.remove("hidden");
+  setupLobbyUI();
+  if(window.Playroom.isHost()){ $("host-controls").classList.remove("hidden"); $("guest-wait").classList.add("hidden"); $("lobby-role").textContent="Vous êtes l'hôte de la partie."; }
+  else { $("host-controls").classList.add("hidden"); $("guest-wait").classList.remove("hidden"); $("lobby-role").textContent="Vous avez rejoint la partie."; }
+  window.Playroom.onPlayerJoin(handlePlayerJoin);
+  startPolling();
+}
+
+/* ---- boutons ---- */
+$("btn-online").onclick=async ()=>{
+  if(!window.Playroom){
+    alert(window.__PLAYROOM_ERROR
+      ? "Le module multijoueur n'a pas pu se charger (connexion Internet requise)."
+      : "Le module multijoueur est encore en cours de chargement, réessayez dans un instant.");
+    return;
+  }
+  showLobbyScreen();
+  $("lobby-connecting").classList.remove("hidden");
+  $("lobby-main").classList.add("hidden");
+  $("lobby-error").classList.add("hidden");
+  try{
+    const opts={ skipLobby:true, maxPlayersPerRoom:4 };
+    if(PLAYROOM_GAME_ID) opts.gameId=PLAYROOM_GAME_ID;
+    await window.Playroom.insertCoin(opts);
+    netOnConnected();
+  }catch(e){
+    lobbyError("Connexion impossible : "+(e&&e.message?e.message:e)+
+      "\n\nVérifiez que le jeu est servi via une adresse http(s) (hébergé en ligne) et non ouvert comme fichier local, et que l'identifiant de partie Playroom est renseigné.");
+  }
+};
+
+$("btn-launch").onclick=()=>{
+  if(NET.players.length<2) return;
+  const list=NET.players.slice();
+  const names=list.map((pl,i)=>profName(pl,i));
+  const seats={}, playerIds=[];
+  list.forEach((pl,i)=>{ seats[pl.id]=i; playerIds.push(pl.id); });
+  NET.seat=seats[NET.myId];
+  const opts={ names, objectives:$("lob-obj").checked, cat:$("lob-cat").checked, seats, playerIds };
+  showGameScreen();
+  initGame(opts);   // démarre + render()->netPush() diffuse l'état initial (seats inclus)
+};
+
+/* ---- diffusion automatique : chaque render local pousse l'état ---- */
+const _origRender = render;
+render = function(){ _origRender(); netPush(); };
+</script>
+</body>
+</html>
