@@ -139,6 +139,8 @@ svg.board{width:100%;height:auto;touch-action:manipulation;max-height:54vh}
 .hexcell:hover{filter:brightness(1.12)}
 .cell-empty{fill:rgba(255,255,255,.05);stroke:rgba(255,255,255,.14)}
 .cell-elig{stroke:var(--warn);stroke-width:3;filter:drop-shadow(0 0 6px rgba(232,177,58,.7))}
+.cell-coast{stroke:#6fa8ff;stroke-width:2.5}
+.cell-coast-conn{stroke:#3a6ee0;stroke-width:3.5;filter:drop-shadow(0 0 5px rgba(83,80,196,.6))}
 .cell-recyc-src{stroke:var(--good);stroke-width:3;filter:drop-shadow(0 0 6px rgba(92,184,92,.7))}
 .cellico{font-size:20px;pointer-events:none;dominant-baseline:central;text-anchor:middle}
 .lvlbadge{pointer-events:none}
@@ -237,6 +239,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
 #home .slogan{margin-top:16px;font-size:clamp(15px,3.6vw,23px);font-style:italic;color:#e3efed;letter-spacing:.4px;
   text-shadow:0 2px 14px rgba(0,0,0,.6)}
 #home .btns{margin-top:36px;display:flex;flex-direction:column;gap:12px;width:min(320px,82%)}
+#home .version{margin-top:14px;font-size:12px;letter-spacing:1px;color:rgba(227,239,237,.6);text-shadow:0 1px 6px rgba(0,0,0,.6)}
 #home .b-play,#home .b-rules{padding:16px 18px;border-radius:14px;font-size:17px;font-weight:800;box-shadow:0 10px 26px rgba(0,0,0,.4)}
 #home .b-play{background:linear-gradient(180deg,#61b277,#3c8a55);color:#06231a;border:1px solid rgba(255,255,255,.28)}
 #home .b-rules{background:rgba(9,26,30,.55);color:#e3efed;border:1px solid var(--line);backdrop-filter:blur(4px)}
@@ -279,6 +282,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
       <button class="b-play" id="btn-play">Jouer</button>
       <button class="b-rules" id="btn-rules">Règle du jeu</button>
     </div>
+    <div class="version" id="app-version">V2.3</div>
   </div>
 </section>
 
@@ -461,9 +465,9 @@ svg.gulf{width:100%;max-width:360px;height:auto}
       </div>
 
       <div class="card">
-        <h3>Gulf Stream <span id="gulf-sub" style="font-weight:600;color:#9fc1bc;text-transform:none;letter-spacing:0">votre portion encadrée de blanc</span></h3>
+        <h3>Gulf Stream <span id="gulf-sub" style="font-weight:600;color:#9fc1bc;text-transform:none;letter-spacing:0">chaque portion porte le nom de son joueur ; vos 3 cases sont encadrées de blanc</span></h3>
         <div class="gulf-wrap">
-          <svg class="gulf" id="gulf" viewBox="0 0 360 360" aria-label="Gulf Stream"></svg>
+          <svg class="gulf" id="gulf" viewBox="-22 -22 404 404" aria-label="Gulf Stream"></svg>
         </div>
         <div class="gulf-cap">Le courant tourne dans le sens inverse du jeu. Un 🎲 envoie la pollution des cases tirées vers le continent de plastique.</div>
       </div>
@@ -661,12 +665,16 @@ const OBJECTIVES = [
 /* =========================================================================
    HEX GRID — hexagone "plat" de rayon 2 (19 cases), coordonnées axiales q,r
    ========================================================================= */
-const HEX_R = 2, HEX_SIZE = 46;
+const HEX_SIZE = 44;
 const DIRS = [[+1,0],[+1,-1],[0,-1],[-1,0],[-1,+1],[0,+1]];
 function buildCells(){
-  const cells=[];
-  for(let q=-HEX_R;q<=HEX_R;q++){
-    for(let r=Math.max(-HEX_R,-q-HEX_R);r<=Math.min(HEX_R,-q+HEX_R);r++){
+  // Hexagone rayon 3 (37 cases) — on retire la rangée de pointe du bas (r=3, 4 cases)
+  // et les 2 coins du haut (r=-3, q=0 et q=3) -> 31 cases, bord inférieur plat de 5 cases.
+  const R=3, cells=[];
+  for(let q=-R;q<=R;q++){
+    for(let r=Math.max(-R,-q-R);r<=Math.min(R,-q+R);r++){
+      if(r===3) continue;
+      if(r===-3 && (q===0||q===3)) continue;
       cells.push({q,r,key:q+","+r});
     }
   }
@@ -674,20 +682,25 @@ function buildCells(){
 }
 const CELLS = buildCells();
 const CELL_INDEX = {}; CELLS.forEach((c,i)=>CELL_INDEX[c.key]=i);
+const COAST_R = Math.max(...CELLS.map(c=>c.r));            // rangée du bas (r=2) = côtière
+const COAST_CELLS = CELLS.filter(c=>c.r===COAST_R).sort((a,b)=>a.q-b.q); // 5 cases, gauche→droite
+// 3 cases centrales réellement connectées au Gulf Stream (cf. règle 4.1 : 3 cases actives)
+const COAST_CONNECTED = COAST_CELLS.slice(1,4).map(c=>c.key);
 function neighborsKeys(q,r){return DIRS.map(([dq,dr])=>(q+dq)+","+(r+dr)).filter(k=>k in CELL_INDEX);}
+// orientation POINTE EN HAUT : rangées horizontales, bord bas plat
 function hexPixel(q,r){
-  const x = HEX_SIZE*1.5*q;
-  const y = HEX_SIZE*Math.sqrt(3)*(r + q/2);
-  return {x:x+300, y:y+280};
+  const x = HEX_SIZE*Math.sqrt(3)*(q + r/2);
+  const y = HEX_SIZE*1.5*r;
+  return {x, y};
 }
 function hexPoints(cx,cy,s){
   let p=[];
-  for(let i=0;i<6;i++){const a=Math.PI/180*(60*i);p.push((cx+s*Math.cos(a)).toFixed(1)+","+(cy+s*Math.sin(a)).toFixed(1));}
+  for(let i=0;i<6;i++){const a=Math.PI/180*(60*i-90);p.push((cx+s*Math.cos(a)).toFixed(1)+","+(cy+s*Math.sin(a)).toFixed(1));}
   return p.join(" ");
 }
-/* rôles spatiaux pour catastrophes */
+/* rôles spatiaux */
 function isCenter(c){return c.q===0&&c.r===0;}
-function isCoast(c){return c.r===HEX_R;} // rangée du bas = côtière (face au Gulf Stream)
+function isCoast(c){return c.r===COAST_R;}                 // rangée du bas = côtière (face au Gulf Stream)
 
 /* =========================================================================
    STATE
@@ -846,7 +859,7 @@ function applyCatastrophe(p,ev){
     const [q,r]=k.split(",").map(Number);
     if(ev.target.type && c.type!==ev.target.type) continue;
     if(ev.target.pos==="center" && !(q===0&&r===0)) continue;
-    if(ev.target.pos==="coast" && r!==HEX_R) continue;
+    if(ev.target.pos==="coast" && r!==COAST_R) continue;
     candidates.push({k,c});
   }
   if(!candidates.length) return;
@@ -1242,6 +1255,14 @@ function phaseLabel(m){return {produce:"Production",build:"Construction",recycle
 
 function renderBoard(p){
   const svg=$("board");
+  // viewBox auto-ajusté à la forme du plateau
+  const pts=CELLS.map(c=>hexPixel(c.q,c.r));
+  const pad=HEX_SIZE*1.2;
+  const minX=Math.min(...pts.map(o=>o.x))-pad, maxX=Math.max(...pts.map(o=>o.x))+pad;
+  const minY=Math.min(...pts.map(o=>o.y))-pad, maxY=Math.max(...pts.map(o=>o.y))+pad;
+  svg.setAttribute("viewBox",`${minX.toFixed(1)} ${minY.toFixed(1)} ${(maxX-minX).toFixed(1)} ${(maxY-minY).toFixed(1)}`);
+  const coastKeys=new Set(COAST_CELLS.map(c=>c.key));
+  const connKeys=new Set(COAST_CONNECTED);
   const pe=G.pending;
   const eligPoll = (pe&&pe.mode==="placePollution")? new Set(eligiblePollutionCells(p)) : new Set();
   const eligBuild = (pe&&pe.mode==="build");
@@ -1277,6 +1298,7 @@ function renderBoard(p){
     if(eligPoll.has(cell.key)) cls+=" cell-elig";
     if(recBoardElig.has(cell.key)) cls+=" cell-recyc-src";
     if(recSelect && c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy) cls+=" cell-elig";
+    if(coastKeys.has(cell.key)) cls+= connKeys.has(cell.key)? " cell-coast-conn":" cell-coast";
 
     html+=`<polygon class="${cls}" ${fill} points="${hexPoints(x,y,HEX_SIZE*0.92)}" data-key="${cell.key}"></polygon>${extra}`;
   });
@@ -1285,7 +1307,7 @@ function renderBoard(p){
   svg.querySelectorAll("polygon[data-key]").forEach(el=>{
     el.onclick=()=>onBoardClick(el.getAttribute("data-key"));
   });
-  $("board-sub").textContent="";
+  $("board-sub").textContent="— bord bleu : 5 cases bordant le Gulf Stream";
 }
 function pollutionGlyph(x,y,lvl){
   const col=lvl===1?"#d9d2c4":lvl===2?"#b7ad97":"#8f8567";
@@ -1328,12 +1350,18 @@ function renderGulf(p){
     }else{
       html+=`<text x="${x}" y="${y+3}" text-anchor="middle" style="font-size:${Math.max(7,fsz-2)}px;fill:rgba(255,255,255,.35)">${slot.num}</text>`;
     }
-    // marqueur joueur (pastille couleur sur la 1re case de chaque portion)
-    if(mine && i===p.gulfStart){
-      const px=cx+(R+r+10)*Math.cos(a), py=cy+(R+r+10)*Math.sin(a);
-      html+=`<circle cx="${px}" cy="${py}" r="5" fill="${p.color}"/>`;
-    }
+    // (les marqueurs de portion sont ajoutés après la boucle, pour tous les joueurs)
   }
+  // libellés des portions : nom de chaque joueur en regard de ses 3 cases actives
+  G.players.forEach(pl=>{
+    const mid=(pl.gulfStart+1)%LEN;
+    const a=(-90 + mid*360/LEN)*Math.PI/180;
+    const lx=cx+(R+r+13)*Math.cos(a), ly=cy+(R+r+13)*Math.sin(a);
+    const nm=(pl.name||"").slice(0,9);
+    const me=pl.i===p.i;
+    html+=`<circle cx="${cx+(R+r+13)*Math.cos(a)}" cy="${ly-9}" r="4" fill="${pl.color}"/>`;
+    html+=`<text x="${lx}" y="${ly+5}" text-anchor="middle" style="font-size:10px;font-weight:${me?800:600};fill:${me?'#fff':'#bcd6d2'}">${nm}</text>`;
+  });
   svg.innerHTML=html;
   svg.querySelectorAll("circle[data-slot]").forEach(el=>{
     el.onclick=()=>onGulfClick(parseInt(el.getAttribute("data-slot")));
@@ -1823,6 +1851,10 @@ $("r-play").onclick=()=>{$("rules-overlay").classList.add("hidden");leaveHome();
 window.addEventListener("resize",resizeHome);
 
 /* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
+/* Version de l'application — incrémenter à chaque nouvelle build. */
+const APP_VERSION = "V2.3";
+if($("app-version")) $("app-version").textContent = APP_VERSION;
+
 (function startHome(){
   if(window.THREE){initHome3D();return;}
   window.addEventListener("three-ready",initHome3D,{once:true});
