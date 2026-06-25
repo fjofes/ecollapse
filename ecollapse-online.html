@@ -215,12 +215,120 @@ svg.gulf{width:100%;max-width:360px;height:auto}
 .again{width:100%;margin-top:16px;padding:14px;border-radius:14px;font-weight:800;background:#fff;color:var(--ink)}
 
 .diceroll{font-variant-numeric:tabular-nums}
+/* =========================================================================
+   PAGE D'ACCUEIL — scène animée (DA inspirée de la pochette)
+   ========================================================================= */
+#home{position:fixed;inset:0;overflow:hidden;background:#1e3a44;z-index:50}
+#home .scene{position:absolute;inset:0;pointer-events:none}
+#home .sky{position:absolute;inset:0;background:linear-gradient(180deg,#16323c 0%,#264a52 40%,#3f6d73 72%,#5e878a 100%)}
+#home #gl{position:absolute;inset:0;width:100%;height:100%;display:block}
+#home .grade{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(130% 92% at 50% 34%,transparent 46%,rgba(6,18,22,.62) 100%),
+  linear-gradient(180deg,rgba(8,22,26,.32),transparent 22%,transparent 62%,rgba(5,15,19,.52))}
+#home .loading3d{position:absolute;left:0;right:0;bottom:16%;text-align:center;color:#cfe1de;
+  font-size:13px;letter-spacing:.6px;opacity:.9;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+
+#home .hud{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:24px;z-index:5;pointer-events:none}
+#home .hud>*{pointer-events:auto}
+#home .vlogo{font-weight:900;font-size:clamp(52px,12.5vw,128px);letter-spacing:-2px;line-height:.9;color:#cfe3e6;
+  text-shadow:0 8px 30px rgba(0,0,0,.5)}
+#home .vlogo .recy-o{display:inline-block;transform:translateY(.05em)}
+#home .slogan{margin-top:16px;font-size:clamp(15px,3.6vw,23px);font-style:italic;color:#e3efed;letter-spacing:.4px;
+  text-shadow:0 2px 14px rgba(0,0,0,.6)}
+#home .btns{margin-top:36px;display:flex;flex-direction:column;gap:12px;width:min(320px,82%)}
+#home .b-play,#home .b-rules{padding:16px 18px;border-radius:14px;font-size:17px;font-weight:800;box-shadow:0 10px 26px rgba(0,0,0,.4)}
+#home .b-play{background:linear-gradient(180deg,#61b277,#3c8a55);color:#06231a;border:1px solid rgba(255,255,255,.28)}
+#home .b-rules{background:rgba(9,26,30,.55);color:#e3efed;border:1px solid var(--line);backdrop-filter:blur(4px)}
+#home .b-play:active,#home .b-rules:active{transform:translateY(1px)}
+
+#rules-overlay{position:fixed;inset:0;z-index:100;background:rgba(8,20,24,.82);backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:center;padding:20px}
+#rules-overlay .rsheet{width:min(640px,100%);max-height:88dvh;overflow:auto;
+  background:linear-gradient(180deg,rgba(22,48,52,.97),rgba(14,34,38,.97));border:1px solid var(--line);
+  border-radius:18px;padding:26px;box-shadow:var(--shadow)}
+.rsheet h2{font-size:26px;margin-bottom:2px}
+.rsheet .rs-sub{color:#9fc8c2;font-size:13px;margin:0 0 8px}
+.rsheet h3{font-size:13px;text-transform:uppercase;letter-spacing:.7px;color:#8fc0ba;margin:18px 0 4px}
+.rsheet p{font-size:14px;line-height:1.6;color:#d7e8e4;margin:4px 0}
+.rsheet ul{margin:4px 0;padding-left:18px}.rsheet li{font-size:14px;line-height:1.6;color:#d7e8e4;margin:3px 0}
+.rsheet .rclose{position:sticky;bottom:-2px;margin-top:22px;display:flex;gap:10px;background:linear-gradient(180deg,transparent,rgba(14,34,38,.97) 30%);padding-top:10px}
+.rsheet .rclose button{flex:1;padding:13px;border-radius:12px;font-weight:800;font-size:15px}
+#r-back{background:rgba(255,255,255,.1);color:#fff;border:1px solid var(--line)}
+#r-play{background:linear-gradient(180deg,#61b277,#3c8a55);color:#06231a;border:1px solid rgba(255,255,255,.25)}
+
+@media (prefers-reduced-motion:reduce){
+  #home .puff,#home .ripple,#home .cloud,#home .drop{animation:none}
+}
 </style>
 </head>
 <body>
 
+<!-- ================= ACCUEIL ================= -->
+<section id="home">
+  <div class="scene">
+    <div class="sky"></div>
+    <canvas id="gl"></canvas>
+    <div class="grade"></div>
+    <div class="loading3d" id="loading3d">chargement de la scène…</div>
+  </div>
+  <div class="hud">
+    <div class="vlogo">EC<span class="recy-o">♻</span>LLAPSE</div>
+    <div class="slogan">«&nbsp;un choix, une conséquence…&nbsp;»</div>
+    <div class="btns">
+      <button class="b-play" id="btn-play">Jouer</button>
+      <button class="b-rules" id="btn-rules">Règle du jeu</button>
+    </div>
+  </div>
+</section>
+
+<!-- ================= RÈGLES ================= -->
+<div id="rules-overlay" class="hidden">
+  <div class="rsheet">
+    <h2>Règle du jeu</h2>
+    <p class="rs-sub">Bâtissez votre société, prospérez… sans étouffer la planète. Le plus de points de victoire l'emporte.</p>
+
+    <h3>But du jeu</h3>
+    <p>Développez votre ville en construisant et produisant des ressources. Mais chaque action rejette de la pollution : à vous de la gérer (recyclage) avant qu'elle ne s'accumule dans le continent de plastique. La partie s'arrête quand celui-ci atteint 30 pollutions ; on compte alors les points de victoire (P.v).</p>
+
+    <h3>À votre tour</h3>
+    <ul>
+      <li>Le Gulf Stream tourne d'une case, puis vous payez la <b>taxe d'habitation</b> (1 nourriture par habitation).</li>
+      <li>Enchaînez librement, dans l'ordre que vous voulez : <b>Production</b>, <b>Construction</b>, <b>Recyclage</b>.</li>
+      <li>Terminez votre tour. Si vous n'avez pas construit et/ou pas produit, vous gagnez des points de recyclage en bonus.</li>
+    </ul>
+
+    <h3>Produire & construire</h3>
+    <ul>
+      <li>Les fermes, usines et centrales produisent nourriture 🍎, matière première 🪵 et énergie ⚡.</li>
+      <li>On ne construit qu'en <b>remplaçant un pion construction</b> ; les habitations fournissent ces pions.</li>
+      <li>Chaque production ou construction génère <b>1 pollution</b>, à placer sur votre Gulf Stream (niveau libre) ou sur votre plateau (adjacente à un bâtiment).</li>
+    </ul>
+
+    <h3>Recycler</h3>
+    <ul>
+      <li>Un centre de recyclage retire la pollution adjacente. Depuis le <b>Gulf Stream</b>, cela rapporte des <b>points de recyclage</b> (2 P.v chacun) ; depuis votre plateau, cela nettoie sans rapporter de points.</li>
+      <li>Améliorez vos centres pour recycler davantage (prérequis en points de recyclage en réserve).</li>
+    </ul>
+
+    <h3>Continent de plastique & événements</h3>
+    <ul>
+      <li>À chaque tour de table : une carte événement (météo, parfois catastrophe) et un lancer de dé 12 envoient la pollution des cases correspondantes vers le continent de plastique.</li>
+      <li><b>À 30 pollutions, la partie s'arrête.</b></li>
+    </ul>
+
+    <h3>Score final</h3>
+    <p>On additionne : bâtiments (selon leur niveau), points de recyclage (×2), objectif secret éventuel — et on retire les pénalités de pollution restée sur le plateau.</p>
+
+    <div class="rclose">
+      <button id="r-back">Fermer</button>
+      <button id="r-play">Jouer</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= SETUP ================= -->
-<section id="setup">
+<section id="setup" class="hidden">
   <div class="setup-card">
     <div class="brand">
       <div class="logo">EC<span class="recy-o">♻</span>LLAPSE</div>
@@ -411,8 +519,9 @@ svg.gulf{width:100%;max-width:360px;height:auto}
 <!-- modal mount -->
 <div id="modal-mount"></div>
 
-<!-- Chargement du SDK Playroom Kit (module ES depuis un CDN). -->
+<!-- Chargement des SDK (modules ES depuis un CDN) : Playroom Kit + three.js -->
 <script type="module">
+  // Playroom (multijoueur)
   try{
     const PR = await import("https://esm.sh/playroomkit");
     window.Playroom = PR;
@@ -422,6 +531,17 @@ svg.gulf{width:100%;max-width:360px;height:auto}
     window.__PLAYROOM_ERROR = e;
     window.dispatchEvent(new Event("playroom-failed"));
     console.error("Playroom load failed", e);
+  }
+  // three.js (scène 3D de l'accueil)
+  try{
+    const THREE = await import("https://esm.sh/three@0.160.0");
+    window.THREE = THREE;
+    window.__THREE_READY = true;
+    window.dispatchEvent(new Event("three-ready"));
+  }catch(e){
+    window.__THREE_ERROR = e;
+    window.dispatchEvent(new Event("three-failed"));
+    console.error("three load failed", e);
   }
 </script>
 
@@ -1428,6 +1548,273 @@ $("btn-start").onclick=()=>{
   initGame(opts);
 };
 $("btn-again").onclick=()=>location.reload();
+
+/* =========================================================================
+   PAGE D'ACCUEIL — scène 3D (three.js) : travelling 360° autour de la ville
+   ========================================================================= */
+var H3={renderer:null,scene:null,cam:null,raf:0,t:0,last:0,running:false,left:false,
+        clouds:null,smoke:[],ripples:[],ROT:0.11,CAMR:64,CAMH:20,LOOKY:6,reduce:false};
+
+function _gradTex(THREE,c0,c1){
+  const cv=document.createElement("canvas");cv.width=8;cv.height=256;
+  const ctx=cv.getContext("2d");const g=ctx.createLinearGradient(0,0,0,256);
+  g.addColorStop(0,c0);g.addColorStop(1,c1);ctx.fillStyle=g;ctx.fillRect(0,0,8,256);
+  const t=new THREE.CanvasTexture(cv);t.needsUpdate=true;return t;
+}
+function _softTex(THREE,inner){
+  const cv=document.createElement("canvas");cv.width=cv.height=64;const ctx=cv.getContext("2d");
+  const g=ctx.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,inner);g.addColorStop(1,"rgba(255,255,255,0)");
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(32,32,32,0,Math.PI*2);ctx.fill();
+  return new THREE.CanvasTexture(cv);
+}
+function _rand(a,b){return a+Math.random()*(b-a);}
+function _raysTex(THREE){
+  const s=256,cv=document.createElement("canvas");cv.width=cv.height=s;const ctx=cv.getContext("2d");
+  ctx.translate(s/2,s/2);const n=26;
+  for(let i=0;i<n;i++){
+    const a=(i/n)*Math.PI*2,len=(s/2)*(0.45+0.55*Math.random());
+    const g=ctx.createLinearGradient(0,0,Math.cos(a)*len,Math.sin(a)*len);
+    g.addColorStop(0,"rgba(255,244,210,0.55)");g.addColorStop(1,"rgba(255,244,210,0)");
+    ctx.strokeStyle=g;ctx.lineWidth=2+Math.random()*5;
+    ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*len,Math.sin(a)*len);ctx.stroke();
+  }
+  return new THREE.CanvasTexture(cv);
+}
+
+function initHome3D(){
+  if(H3.renderer||H3.left)return;
+  const THREE=window.THREE,home=$("home"),canvas=$("gl");
+  if(!THREE||!canvas||home.classList.contains("hidden"))return;
+  try{
+    H3.reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+    const W=home.clientWidth||window.innerWidth, Hh=home.clientHeight||window.innerHeight;
+    const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+    renderer.setSize(W,Hh,false);
+    if(THREE.ACESFilmicToneMapping){renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;}
+    const scene=new THREE.Scene();
+    scene.background=_gradTex(THREE,"#15313b","#5a8084");
+    scene.fog=new THREE.Fog("#6f9499",80,320);
+    const cam=new THREE.PerspectiveCamera(46,W/Hh,0.1,2000);
+
+    // ---- lumière (renforcée) + soleil ----
+    scene.add(new THREE.HemisphereLight("#d8eae7","#2b4433",1.3));
+    const dir=new THREE.DirectionalLight("#fff3d8",1.8);
+    scene.add(new THREE.AmbientLight("#42666a",0.55));
+    const sunPos={x:60,y:26,z:-250};
+    dir.position.set(sunPos.x,sunPos.y,sunPos.z);
+
+    // ---- géométries (formes hexagonales pour rappeler le jeu) ----
+    const G={
+      box:new THREE.BoxGeometry(1,1,1),
+      cyl:new THREE.CylinderGeometry(1,1,1,14),
+      cone:new THREE.ConeGeometry(1,1,12),
+      ico:new THREE.IcosahedronGeometry(1,0),
+      dod:new THREE.DodecahedronGeometry(1,0),
+      tor:new THREE.TorusGeometry(1,0.12,8,6),
+      circ:new THREE.CircleGeometry(1,48),
+      hex:new THREE.CircleGeometry(1,6),
+      hexP:new THREE.CylinderGeometry(1,1,1,6),
+      hexR:new THREE.ConeGeometry(1,1,6)
+    };
+    const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:0.9,metalness:0.0},o));
+    const M={
+      grass:mat("#3f7547"),hill:mat("#356340"),hill2:mat("#2c5436"),sand:mat("#cdb478"),
+      water:new THREE.MeshStandardMaterial({color:"#2b6c70",roughness:0.3,metalness:0.3,transparent:true,opacity:0.95}),
+      house:mat("#cbae73"),roof:mat("#7a4a39"),
+      bldg:mat("#9aa7ad"),bldgTop:mat("#7f8d93"),
+      factory:mat("#8a9398"),stack:mat("#5b6168"),
+      recy:mat("#3a48a6"),recyRoof:mat("#cfe0ff",{emissive:"#9fb4ff",emissiveIntensity:0.25}),
+      trunk:mat("#4a3320"),foli:["#234c2e","#2c6a3c","#3a8048"].map(c=>mat(c)),
+      rock:mat("#5a666a"),pipe:mat("#6a7075",{metalness:0.3,roughness:0.6}),
+      barn:mat("#a4503c"),field:mat("#6e5126"),
+      farmBody:mat("#3f6e8c"),townBody:mat("#566b86"),head:mat("#d8b48a"),hat:mat("#c8a44a")
+    };
+    const flat=(m)=>{m.rotation.x=-Math.PI/2;return m;};
+    const add=(geo,material,x,y,z,sx,sy,sz)=>{const me=new THREE.Mesh(geo,material);me.position.set(x,y,z);me.scale.set(sx,sy,sz!=null?sz:sx);scene.add(me);return me;};
+
+    // ---- terrain : vallée hexagonale verte ouverte sur la mer ----
+    flat(add(G.hex,M.grass,0,0,0,86,86));
+    const sea=new THREE.Mesh(G.hex,M.water);sea.rotation.x=-Math.PI/2;sea.position.set(0,-0.5,40);sea.scale.set(300,300,300);scene.add(sea);
+    flat(add(G.hex,M.sand,1,0.04,66,16,16));
+
+    // ---- vallons (collines douces) en arc à l'arrière/côtés ----
+    for(let a=Math.PI*0.60;a<=Math.PI*2.40;a+=Math.PI*0.10){
+      const R=_rand(70,92),x=Math.cos(a)*R,z=Math.sin(a)*R,h=_rand(9,20),w=_rand(34,52);
+      add(G.ico,(Math.random()<0.5?M.hill:M.hill2),x,h*0.18,z,w*0.5,h,w*0.5);
+    }
+
+    // ---- fleuve : serpente du fond vers la mer ----
+    const riverPts=[[6,-56],[2,-36],[-3,-16],[0,4],[4,26],[2,48],[1,70],[1,92]];
+    riverPts.forEach((p,i)=>{const w=5+i*0.5;flat(add(G.circ,M.water,p[0],0.05,p[1],w,w));});
+
+    // ---- petite ville (rive +X) : bâtiments hexagonaux uniformisés ----
+    function building(x,z,r,h,body,top){
+      add(G.hexP,body,x,h/2,z,r,h,r);
+      if(top)add(G.hexP,top,x,h+0.3,z,r*0.92,0.6,r*0.92);
+    }
+    function house(x,z){
+      add(G.hexP,M.house,x,1.1,z,1.7,2.2,1.7);
+      add(G.hexR,M.roof,x,3.0,z,2.0,1.5,2.0);
+    }
+    building(12,1,2.1,12,M.bldg,M.bldgTop);
+    building(15,-3,2.0,10,M.bldg,M.bldgTop);
+    [[8,5],[11,7],[16,4],[19,0],[17,-7],[9,-4],[13,-9],[21,-4]].forEach(p=>house(p[0],p[1]));
+
+    // ---- usine (bord de ville) ----
+    building(28,-8,3.2,7,M.factory,null);
+    const stacks=[[30,-6],[28,-10],[26,-7]];
+    stacks.forEach(([x,z])=>{
+      add(G.cyl,M.stack,x,7,z,0.7,12,0.7);
+      const cap=add(G.tor,M.stack,x,12.5,z,0.95,0.95,0.95);cap.rotation.x=Math.PI/2;
+      makeSmoke(THREE,M,scene,x,12.5,z);
+    });
+    const pipe=add(G.cyl,M.pipe,18,0.5,2,0.5,8,0.5);pipe.rotation.z=Math.PI/2;
+
+    // ---- centre de recyclage au bord du fleuve ----
+    add(G.hexP,M.recy,5,2.2,8,2.4,4.4,2.4);
+    add(G.hexR,M.recyRoof,5,5.4,8,2.7,1.6,2.7);
+    const mark=add(G.tor,M.recyRoof,5,6.8,8,1.0,1.0,1.0);
+
+    // ---- fermes (champs à plat) + agriculteurs (plus petits) ----
+    H3.farmers=[];
+    function farmer(x,z,body,sc){
+      const g=new THREE.Group();g.position.set(x,0,z);
+      const b=new THREE.Mesh(G.cyl,body);b.scale.set(0.32,0.8,0.32);b.position.y=0.7;g.add(b);
+      const hd=new THREE.Mesh(G.ico,M.head);hd.scale.set(0.28,0.28,0.28);hd.position.y=1.25;g.add(hd);
+      const ht=new THREE.Mesh(G.cone,M.hat);ht.scale.set(0.4,0.28,0.4);ht.position.y=1.42;g.add(ht);
+      g.scale.set(sc,sc,sc);scene.add(g);return g;
+    }
+    function farm(x,z){
+      add(G.box,M.field,x,0.06,z,15,0.12,11);
+      add(G.hexP,M.barn,x-6,1.7,z-4,2.6,3.4,2.6);
+      add(G.hexR,M.roof,x-6,4.4,z-4,3.0,2.0,3.0);
+      const f1=farmer(x+_rand(-4,4),z+_rand(-3,3),M.farmBody,1);H3.farmers.push({g:f1,ph:Math.random()*6.28,spd:_rand(2.2,3.2)});
+      const f2=farmer(x+_rand(-4,4),z+_rand(-3,3),M.farmBody,1);H3.farmers.push({g:f2,ph:Math.random()*6.28,spd:_rand(2.2,3.2)});
+    }
+    farm(34,16);farm(30,26);
+
+    // ---- file indienne de villageois : des immeubles vers l'usine ----
+    H3.walkers=[];H3.walkPath={a:{x:14,z:-2},b:{x:27,z:-8}};
+    for(let i=0;i<6;i++){const g=farmer(0,0,M.townBody,0.85);H3.walkers.push({g,off:i/6});}
+
+    // ---- arbres sur les pentes ----
+    for(let i=0;i<20;i++){
+      const a=_rand(Math.PI*0.60,Math.PI*2.40),r=_rand(40,72),x=Math.cos(a)*r,z=Math.sin(a)*r;
+      const h=_rand(4,8),tw=_rand(0.28,0.42);
+      add(G.cyl,M.trunk,x,h*0.28,z,tw,h*0.55,tw);
+      const g=M.foli[(Math.random()*3)|0],base=h*0.5;
+      add(G.cone,g,x,base+h*0.18,z,_rand(1.6,2.4),h*0.55,_rand(1.6,2.4));
+      add(G.cone,M.foli[0],x,base+h*0.5,z,_rand(1.2,1.8),h*0.45);
+      add(G.cone,g,x,base+h*0.85,z,_rand(0.8,1.3),h*0.4);
+    }
+    for(let i=0;i<8;i++)add(G.dod,M.rock,_rand(-4,6),-0.1,_rand(45,92),_rand(0.5,1.1),_rand(0.4,0.8));
+
+    // ---- SOLEIL : halo + rayons ----
+    const glowTex=_softTex(THREE,"rgba(255,247,222,0.97)");
+    const raysTex=_raysTex(THREE);
+    const mkSun=(tex,col,op,sc)=>{const m=new THREE.SpriteMaterial({map:tex,color:col,transparent:true,opacity:op,depthWrite:false,depthTest:true,blending:THREE.AdditiveBlending,fog:false});const s=new THREE.Sprite(m);s.scale.set(sc,sc,1);return {s,m};};
+    const sunG=new THREE.Group();sunG.position.set(sunPos.x,sunPos.y,sunPos.z);
+    const rays=mkSun(raysTex,0xfff0c8,0.5,210);
+    const halo=mkSun(glowTex,0xffe6a8,0.55,150);
+    const core=mkSun(glowTex,0xfff6da,0.98,52);
+    sunG.add(rays.s);sunG.add(halo.s);sunG.add(core.s);
+    scene.add(sunG);H3.sun={rays:rays.m};
+
+    // ---- nuages (cumulus visibles) ----
+    const cloudTex=_softTex(THREE,"rgba(245,250,250,0.98)");
+    const clouds=new THREE.Group();
+    for(let i=0;i<10;i++){
+      const a=_rand(0,Math.PI*2),r=_rand(45,120),cy=_rand(20,46),cx=Math.cos(a)*r,cz=Math.sin(a)*r;
+      for(let j=0;j<4;j++){
+        const m=new THREE.SpriteMaterial({map:cloudTex,color:0xffffff,transparent:true,opacity:_rand(0.78,0.95),depthWrite:false,fog:false});
+        const sp=new THREE.Sprite(m);sp.position.set(cx+_rand(-9,9),cy+_rand(-2,3),cz+_rand(-6,6));
+        const w=_rand(16,26);sp.scale.set(w,w*_rand(0.5,0.65),1);clouds.add(sp);
+      }
+    }
+    scene.add(clouds);H3.clouds=clouds;
+
+    H3.renderer=renderer;H3.scene=scene;H3.cam=cam;H3.running=true;H3.last=performance.now();H3.t=0;
+    const l=$("loading3d");if(l)l.style.display="none";
+    cancelAnimationFrame(H3.raf);H3.raf=requestAnimationFrame(loopHome);
+  }catch(e){
+    console.warn("Scène 3D indisponible, fond dégradé utilisé.",e);
+    const l=$("loading3d");if(l)l.style.display="none";
+  }
+}
+
+function makeSmoke(THREE,M,scene,x,y,z){
+  const tex=H3._smokeTex||(H3._smokeTex=_softTex(THREE,"rgba(70,76,80,0.85)"));
+  const parts=[];
+  for(let i=0;i<12;i++){
+    const m=new THREE.SpriteMaterial({map:tex,color:0x3c4246,transparent:true,opacity:0,depthWrite:false,fog:true});
+    const sp=new THREE.Sprite(m);
+    const p={sp,life:Math.random(),spd:_rand(0.10,0.18),dx:_rand(-0.06,0.02),dz:_rand(-0.03,0.03),base:{x,y,z}};
+    scene.add(sp);parts.push(p);
+  }
+  H3.smoke.push(parts);
+}
+function updateSmoke(dt){
+  H3.smoke.forEach(parts=>parts.forEach(p=>{
+    if(H3.reduce){ p.sp.material.opacity=0.18; p.sp.position.set(p.base.x,p.base.y+6,p.base.z); p.sp.scale.set(4,4,1); return; }
+    p.life+=dt*p.spd*3;
+    if(p.life>1)p.life=0;
+    const L=p.life,H=18;
+    p.sp.position.set(p.base.x+p.dx*L*H, p.base.y+L*H, p.base.z+p.dz*L*H);
+    const s=1.4+L*5; p.sp.scale.set(s,s,1);
+    p.sp.material.opacity=Math.sin(Math.min(1,L)*Math.PI)*0.45;
+  }));
+}
+function updateRipples(dt){
+  H3.ripples.forEach(me=>{
+    me.userData.ph+=dt*0.25; if(me.userData.ph>1)me.userData.ph-=1;
+    const p=me.userData.ph,s=2+p*42;
+    me.scale.set(s,s,s); me.material.opacity=(1-p)*0.22;
+  });
+}
+function loopHome(now){
+  if(!H3.running){return;}
+  H3.raf=requestAnimationFrame(loopHome);
+  const dt=Math.min(0.05,(now-H3.last)/1000||0);H3.last=now;H3.t+=dt;
+  const ang=H3.reduce? 0.6 : H3.t*H3.ROT;
+  H3.cam.position.set(Math.sin(ang)*H3.CAMR, H3.CAMH+(H3.reduce?0:Math.sin(H3.t*0.4)*1.3), Math.cos(ang)*H3.CAMR);
+  H3.cam.lookAt(0,H3.LOOKY,0);
+  if(H3.clouds && !H3.reduce)H3.clouds.rotation.y+=dt*0.008;
+  if(H3.sun && H3.sun.rays && !H3.reduce)H3.sun.rays.rotation+=dt*0.06;
+  if(H3.farmers)H3.farmers.forEach(f=>{f.g.rotation.x=H3.reduce?0.2:Math.sin(H3.t*f.spd+f.ph)*0.32;});
+  if(H3.walkers&&H3.walkPath){const A=H3.walkPath.a,B=H3.walkPath.b,ry=Math.atan2(B.x-A.x,B.z-A.z);
+    H3.walkers.forEach(w=>{const u=(w.off+H3.t*0.03)%1,x=A.x+(B.x-A.x)*u,z=A.z+(B.z-A.z)*u;
+      w.g.position.set(x,H3.reduce?0:Math.abs(Math.sin(u*22+w.off*6))*0.12,z);w.g.rotation.y=ry;});}
+  updateSmoke(dt);updateRipples(dt);
+  H3.renderer.render(H3.scene,H3.cam);
+}
+function resizeHome(){
+  if(!H3.renderer||!H3.cam)return;
+  const home=$("home");if(home.classList.contains("hidden"))return;
+  const W=home.clientWidth,Hh=home.clientHeight;
+  H3.cam.aspect=W/Hh;H3.cam.updateProjectionMatrix();H3.renderer.setSize(W,Hh,false);
+}
+function stopHome3D(){
+  H3.running=false;cancelAnimationFrame(H3.raf);
+  if(H3.renderer){try{H3.renderer.dispose();H3.renderer.forceContextLoss&&H3.renderer.forceContextLoss();}catch(e){}}
+}
+function leaveHome(){H3.left=true;stopHome3D();$("home").classList.add("hidden");$("setup").classList.remove("hidden");}
+
+$("btn-play").onclick=leaveHome;
+$("btn-rules").onclick=()=>$("rules-overlay").classList.remove("hidden");
+$("r-back").onclick=()=>$("rules-overlay").classList.add("hidden");
+$("r-play").onclick=()=>{$("rules-overlay").classList.add("hidden");leaveHome();};
+
+window.addEventListener("resize",resizeHome);
+
+/* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
+(function startHome(){
+  if(window.THREE){initHome3D();return;}
+  window.addEventListener("three-ready",initHome3D,{once:true});
+  window.addEventListener("three-failed",()=>{const l=$("loading3d");if(l)l.style.display="none";},{once:true});
+  setTimeout(()=>{if(!H3.renderer){const l=$("loading3d");if(l)l.style.display="none";}},9000);
+})();
 
 /* action buttons */
 $("act-produce").onclick=()=>{ if(G.pending&&G.pending.mode==="produce"){clearPending();setHint("Production interrompue.");}else startProduce(); };
