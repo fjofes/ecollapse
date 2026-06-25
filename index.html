@@ -289,7 +289,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
     <p class="rs-sub">Bâtissez votre société, prospérez… sans étouffer la planète. Le plus de points de victoire l'emporte.</p>
 
     <h3>But du jeu</h3>
-    <p>Développez votre ville en construisant et produisant des ressources. Mais chaque action rejette de la pollution : à vous de la gérer (recyclage) avant qu'elle ne s'accumule dans le continent de plastique. La partie s'arrête quand celui-ci atteint 30 pollutions ; on compte alors les points de victoire (P.v).</p>
+    <p>Développez votre ville en construisant et produisant des ressources. Mais chaque action rejette de la pollution : à vous de la gérer (recyclage) avant qu'elle ne s'accumule dans le continent de plastique. La partie s'arrête quand celui-ci atteint son seuil de pollution (calculé selon le nombre de joueurs et la durée) ; on compte alors les points de victoire (P.v).</p>
 
     <h3>À votre tour</h3>
     <ul>
@@ -313,7 +313,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
 
     <h3>Continent de plastique & événements</h3>
     <ul>
-      <li>À chaque tour de table : une carte événement (météo, parfois catastrophe) et un lancer de dé 12 envoient la pollution des cases correspondantes vers le continent de plastique.</li>
+      <li>À chaque tour de table : une carte événement (météo, parfois catastrophe) et un lancer de dé envoient la pollution des cases correspondantes vers le continent de plastique.</li>
       <li><b>À 30 pollutions, la partie s'arrête.</b></li>
     </ul>
 
@@ -371,7 +371,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
         <li>Produire ou construire génère <b>1 pollution</b> à placer sur votre Gulf Stream (niveau libre) ou sur votre plateau (Niv.1, adjacent à un bâtiment).</li>
         <li>On ne construit qu'en <b>remplaçant un pion construction</b>. Les habitations fournissent ces pions.</li>
         <li>Recycler depuis le Gulf Stream rapporte des <b>points de recyclage</b> (2 P.v chacun).</li>
-        <li>Le Gulf Stream tourne d'une case à chaque tour ; un dé 12 envoie la pollution vers le <b>continent de plastique</b>. À 30, la partie s'arrête.</li>
+        <li>Le Gulf Stream tourne d'une case à chaque tour ; un dé envoie la pollution vers le <b>continent de plastique</b>. À son seuil, la partie s'arrête.</li>
       </ul>
     </details>
   </div>
@@ -432,10 +432,10 @@ svg.gulf{width:100%;max-width:360px;height:auto}
       <div class="e-ico" id="event-ico">🌤️</div>
       <div class="e-txt"><b id="event-name">—</b><small id="event-desc">Pas encore de carte</small></div>
     </div>
-    <div class="plastic" title="Continent de plastique — fin de partie à 30">
+    <div class="plastic" title="Continent de plastique — fin de partie au seuil de pollution">
       <span>🗑️</span>
       <div class="pbar"><i id="plastic-bar" style="width:0%"></i></div>
-      <b><span id="plastic-n">0</span>/30</b>
+      <b><span id="plastic-n">0</span>/<span id="plastic-max">30</span></b>
     </div>
   </div>
 
@@ -465,7 +465,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
         <div class="gulf-wrap">
           <svg class="gulf" id="gulf" viewBox="0 0 360 360" aria-label="Gulf Stream"></svg>
         </div>
-        <div class="gulf-cap">Le courant tourne dans le sens inverse du jeu. Un 🎲 12 envoie la pollution des cases tirées vers le continent de plastique.</div>
+        <div class="gulf-cap">Le courant tourne dans le sens inverse du jeu. Un 🎲 envoie la pollution des cases tirées vers le continent de plastique.</div>
       </div>
     </div>
 
@@ -597,6 +597,11 @@ const B = {
 };
 const POLL_PENALTY = [0,-1,-3,-5];
 
+/* Paramètres ajustables au test (calibrage). */
+const CONFIG = {
+  PLASTIC_BASE: 7.5,   // seuil continent ≈ PLASTIC_BASE × joueurs × (durée/30min). Repère : 2 j / 30 min ≈ 15.
+};
+
 /* Cartes météo (effets appliqués au tour de table en cours) */
 const WEATHER = [
   {id:"precip", ic:"🌧️", name:"Précipitation intense", desc:"Les fermes produisent +1.", mod:{ferme:+1}},
@@ -607,7 +612,7 @@ const WEATHER = [
   {id:"smog",   ic:"🏙️", name:"Saturation particulaire urbaine", desc:"Les usines produisent −1.", mod:{usine:-1}},
   {id:"curr",   ic:"🌊", name:"Renforcement des courants", desc:"Le Gulf Stream avance de 2 cases.", rot:2},
   {id:"stag",   ic:"🧊", name:"Stagnation thermohaline", desc:"Le Gulf Stream s'immobilise ce tour.", rot:0},
-  {id:"mix",    ic:"🌀", name:"Brassage océanique",     desc:"On lance le dé 12 deux fois en début de tour.", dice2:true},
+  {id:"mix",    ic:"🌀", name:"Brassage océanique",     desc:"On lance le dé deux fois en début de tour.", dice2:true},
 ];
 /* Cartes catastrophe : détruit le bâtiment du plus haut niveau correspondant */
 const CATASTROPHE = [
@@ -709,16 +714,23 @@ function initGame(opts){
   const n=opts.names.length;
   const players=opts.names.map((nm,i)=>newPlayer(i,nm.trim()||("Joueur "+(i+1))));
 
-  // Gulf Stream : anneau de 24 cases. label 1..12 (deux par numéro).
+  // Gulf Stream dynamique : 6 cases par joueur (3 actives + 3 de séparation).
+  // dé = (nb de cases)/2 → chaque numéro apparaît sur 2 cases.
+  const LEN = 6*n;
+  const dieMax = LEN/2;            // = 3 × joueurs
   const gulf=[];
-  for(let s=0;s<24;s++) gulf.push({tokens:[], num:(s%12)+1});
-  // portion de 3 cases par joueur, réparties autour de l'anneau
-  players.forEach((p,i)=>{ p.gulfStart = Math.round(i*24/n)%24; });
+  for(let s=0;s<LEN;s++) gulf.push({tokens:[], num:(s%dieMax)+1});
+  players.forEach((p,i)=>{ p.gulfStart = i*6; });   // 3 cases actives à partir de i*6
+
+  // Seuil du continent de plastique = f(joueurs, durée). Repère : 2 j / 30 min ≈ 15.
+  const durationMin = opts.durationMin || 30;
+  const plasticMax = Math.max(8, Math.round(CONFIG.PLASTIC_BASE * n * (durationMin/30)));
 
   G={
     players, n, opts,
     gulf,
-    plastic:0,
+    plastic:0, plasticMax,
+    durationMin,
     round:1, cur:0,
     deck:buildDeck(opts.cat),
     weather:null,         // carte météo active du tour de table
@@ -813,7 +825,8 @@ function applyEventAtRoundStart(ev){
 }
 
 function rollDie(){
-  const d=1+Math.floor(Math.random()*12);
+  const dieMax = G.gulf.length/2;
+  const d=1+Math.floor(Math.random()*dieMax);
   let moved=0;
   G.gulf.forEach(slot=>{
     if(slot.num===d && slot.tokens.length){
@@ -916,7 +929,7 @@ function endTurn(){
 }
 
 function checkEnd(){
-  if(G.plastic>=30){ endGame("Le continent de plastique a atteint 30 pollutions."); return true; }
+  if(G.plastic>=G.plasticMax){ endGame("Le continent de plastique a atteint son maximum ("+G.plasticMax+" pollutions)."); return true; }
   return false;
 }
 
@@ -1119,7 +1132,7 @@ function recycleBoardToken(key){
   render(); updateRecycleHint();
 }
 function isMyGulfSlot(p,idx){
-  for(let k=0;k<3;k++){ if((p.gulfStart+k)%24===idx) return true; }
+  for(let k=0;k<3;k++){ if((p.gulfStart+k)%G.gulf.length===idx) return true; }
   return false;
 }
 function updateRecycleHint(){
@@ -1205,7 +1218,8 @@ function render(){
     $("event-ico").textContent="🌤️"; $("event-name").textContent="Premier tour"; $("event-desc").textContent="Pas de carte au tour 1.";
   }
   $("plastic-n").textContent=G.plastic;
-  $("plastic-bar").style.width=Math.min(100,G.plastic/30*100)+"%";
+  if($("plastic-max")) $("plastic-max").textContent=G.plasticMax;
+  $("plastic-bar").style.width=Math.min(100,G.plastic/G.plasticMax*100)+"%";
 
   // player head
   $("p-dot").style.background=p.color;
@@ -1280,21 +1294,24 @@ function pollutionGlyph(x,y,lvl){
 
 function renderGulf(p){
   const svg=$("gulf");
-  const cx=180,cy=180,R=140,r=20;
+  const LEN=G.gulf.length;
+  const cx=180,cy=180,R=145;
+  const r=Math.max(5, Math.min(20, (2*Math.PI*R/LEN)*0.42));   // taille adaptée au nb de cases
+  const fsz=Math.max(7, Math.min(13, r*0.9));
   const pe=G.pending;
   const placing=(pe&&pe.mode==="placePollution");
   const recRun=(pe&&pe.mode==="recycleRun")?pe:null;
   let html="";
   // anneau
-  html+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="40"/>`;
+  html+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="${2*r+6}"/>`;
   // continent de plastique
   html+=`<circle cx="${cx}" cy="${cy}" r="64" fill="rgba(217,195,154,.18)" stroke="${'#b89a63'}" stroke-width="2"/>`;
   html+=`<text x="${cx}" y="${cy-8}" text-anchor="middle" style="font-size:13px;fill:#e7d8b6;font-weight:800">Plastique</text>`;
   html+=`<text x="${cx}" y="${cy+14}" text-anchor="middle" style="font-size:18px;fill:#fff;font-weight:900">${G.plastic}</text>`;
-  html+=`<text x="${cx}" y="${cy+30}" text-anchor="middle" style="font-size:10px;fill:#cbbf9b">/ 30</text>`;
+  html+=`<text x="${cx}" y="${cy+30}" text-anchor="middle" style="font-size:10px;fill:#cbbf9b">/ ${G.plasticMax}</text>`;
 
-  for(let i=0;i<24;i++){
-    const a=(-90 + i*15)*Math.PI/180;
+  for(let i=0;i<LEN;i++){
+    const a=(-90 + i*360/LEN)*Math.PI/180;
     const x=cx+R*Math.cos(a), y=cy+R*Math.sin(a);
     const slot=G.gulf[i];
     const mine=isMyGulfSlot(p,i);
@@ -1306,18 +1323,15 @@ function renderGulf(p){
     const stroke = mine? "#fff" : "rgba(255,255,255,.25)";
     html+=`<circle class="${cls}" cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${mine?2.5:1.2}" data-slot="${i}" style="cursor:${(placing&&mine)||(recRun&&mine)?'pointer':'default'}"/>`;
     if(slot.tokens.length){
-      html+=`<text x="${x}" y="${y-2}" text-anchor="middle" style="font-size:13px;font-weight:900;fill:#3a3320">${slot.tokens.length}</text>`;
-      html+=`<text x="${x}" y="${y+11}" text-anchor="middle" style="font-size:8px;fill:#6b6248">${slot.tokens.join("·")}</text>`;
+      html+=`<text x="${x}" y="${y-2}" text-anchor="middle" style="font-size:${fsz}px;font-weight:900;fill:#3a3320">${slot.tokens.length}</text>`;
+      if(r>=12) html+=`<text x="${x}" y="${y+11}" text-anchor="middle" style="font-size:8px;fill:#6b6248">${slot.tokens.join("·")}</text>`;
     }else{
-      html+=`<text x="${x}" y="${y+3}" text-anchor="middle" style="font-size:9px;fill:rgba(255,255,255,.35)">${slot.num}</text>`;
+      html+=`<text x="${x}" y="${y+3}" text-anchor="middle" style="font-size:${Math.max(7,fsz-2)}px;fill:rgba(255,255,255,.35)">${slot.num}</text>`;
     }
-    // marqueur joueur
-    if(mine){
-      const px=cx+(R+30)*Math.cos(a), py=cy+(R+30)*Math.sin(a);
-      // afficher pastille couleur seulement sur la 1re case de chaque portion
-      if((i)===(p.gulfStart)) {
-        html+=`<circle cx="${px}" cy="${py}" r="5" fill="${p.color}"/>`;
-      }
+    // marqueur joueur (pastille couleur sur la 1re case de chaque portion)
+    if(mine && i===p.gulfStart){
+      const px=cx+(R+r+10)*Math.cos(a), py=cy+(R+r+10)*Math.sin(a);
+      html+=`<circle cx="${px}" cy="${py}" r="5" fill="${p.color}"/>`;
     }
   }
   svg.innerHTML=html;
