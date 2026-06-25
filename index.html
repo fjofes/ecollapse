@@ -1598,98 +1598,110 @@ function initHome3D(){
     scene.fog=new THREE.Fog("#6f9499",80,320);
     const cam=new THREE.PerspectiveCamera(46,W/Hh,0.1,2000);
 
-    // ---- lumière (renforcée) + soleil derrière les montagnes ----
-    scene.add(new THREE.HemisphereLight("#d4e8e5","#27402f",1.25));
-    const dir=new THREE.DirectionalLight("#fff3d8",1.75);
-    scene.add(new THREE.AmbientLight("#3a5e60",0.5));
-
-    // position du soleil : bas, à l'arrière (côté -Z), loin derrière les montagnes
-    const sunPos={x:46,y:34,z:-258};
+    // ---- lumière (renforcée) + soleil ----
+    scene.add(new THREE.HemisphereLight("#d8eae7","#2b4433",1.3));
+    const dir=new THREE.DirectionalLight("#fff3d8",1.8);
+    scene.add(new THREE.AmbientLight("#42666a",0.55));
+    const sunPos={x:60,y:26,z:-250};
     dir.position.set(sunPos.x,sunPos.y,sunPos.z);
 
-    // géométries unitaires réutilisées
-    const G={box:new THREE.BoxGeometry(1,1,1),cyl:new THREE.CylinderGeometry(1,1,1,14),
-      cone:new THREE.ConeGeometry(1,1,12),ico:new THREE.IcosahedronGeometry(1,0),
-      dod:new THREE.DodecahedronGeometry(1,0),tor:new THREE.TorusGeometry(1,0.09,8,28),
-      circ:new THREE.CircleGeometry(1,48)};
-    const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:0.92,metalness:0.0},o));
+    // ---- géométries (formes hexagonales pour rappeler le jeu) ----
+    const G={
+      box:new THREE.BoxGeometry(1,1,1),
+      cyl:new THREE.CylinderGeometry(1,1,1,14),
+      cone:new THREE.ConeGeometry(1,1,12),
+      ico:new THREE.IcosahedronGeometry(1,0),
+      dod:new THREE.DodecahedronGeometry(1,0),
+      tor:new THREE.TorusGeometry(1,0.12,8,6),
+      circ:new THREE.CircleGeometry(1,48),
+      hex:new THREE.CircleGeometry(1,6),
+      hexP:new THREE.CylinderGeometry(1,1,1,6),
+      hexR:new THREE.ConeGeometry(1,1,6)
+    };
+    const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:0.9,metalness:0.0},o));
     const M={
-      grass:mat("#3a7044"),grass2:mat("#32603c"),plaza:mat("#384b40"),sand:mat("#cdb478"),
-      water:new THREE.MeshStandardMaterial({color:"#27666a",roughness:0.3,metalness:0.3,transparent:true,opacity:0.95}),
-      mtA:mat("#33474a"),mtB:mat("#26393c"),
-      bldg:mat("#3a4c55"),bldgLit:mat("#46606a",{emissive:"#d9c27a",emissiveIntensity:0.35}),
-      stack:mat("#5b6168"),trunk:mat("#48331d"),
-      foli:["#234c2e","#2c6a3c","#3a8048"].map(c=>mat(c)),
-      rock:mat("#445054"),pipe:mat("#6a7075",{metalness:0.3,roughness:0.6}),
+      grass:mat("#3f7547"),hill:mat("#356340"),hill2:mat("#2c5436"),sand:mat("#cdb478"),
+      water:new THREE.MeshStandardMaterial({color:"#2b6c70",roughness:0.3,metalness:0.3,transparent:true,opacity:0.95}),
+      house:mat("#cbae73"),roof:mat("#7a4a39"),
+      bldg:mat("#9aa7ad"),bldgTop:mat("#7f8d93"),
+      factory:mat("#8a9398"),stack:mat("#5b6168"),
       recy:mat("#3a48a6"),recyRoof:mat("#cfe0ff",{emissive:"#9fb4ff",emissiveIntensity:0.25}),
-      house:["#c9a86a","#b98f57","#d8b97e"].map(c=>mat(c)),roofRed:mat("#9e4636"),roofDark:mat("#4a3b2c"),
+      trunk:mat("#4a3320"),foli:["#234c2e","#2c6a3c","#3a8048"].map(c=>mat(c)),
+      rock:mat("#5a666a"),pipe:mat("#6a7075",{metalness:0.3,roughness:0.6}),
       barn:mat("#a4503c"),field:mat("#6e5126"),
-      farmBody:mat("#3f6e8c"),farmHead:mat("#d8b48a"),hat:mat("#c8a44a")
+      farmBody:mat("#3f6e8c"),townBody:mat("#566b86"),head:mat("#d8b48a"),hat:mat("#c8a44a")
     };
     const flat=(m)=>{m.rotation.x=-Math.PI/2;return m;};
     const add=(geo,material,x,y,z,sx,sy,sz)=>{const me=new THREE.Mesh(geo,material);me.position.set(x,y,z);me.scale.set(sx,sy,sz!=null?sz:sx);scene.add(me);return me;};
 
-    // ---- terrain : vallée verte ouverte sur la mer (devant, +Z) ----
-    flat(add(G.circ,M.grass,0,0,0,82,82));                 // plancher de vallée
-    const sea=new THREE.Mesh(G.circ,M.water);sea.rotation.x=-Math.PI/2;sea.position.set(0,-0.5,0);sea.scale.set(320,320,320);scene.add(sea);
-    flat(add(G.circ,M.grass2,18,0.02,18,30,26));           // nuance d'herbe
-    flat(add(G.circ,M.sand,2,0.03,86,46,30));              // grève à l'embouchure
-    flat(add(G.circ,M.plaza,11,0.04,-2,9,9));              // place du village
+    // ---- terrain : vallée hexagonale verte ouverte sur la mer ----
+    flat(add(G.hex,M.grass,0,0,0,86,86));
+    const sea=new THREE.Mesh(G.hex,M.water);sea.rotation.x=-Math.PI/2;sea.position.set(0,-0.5,40);sea.scale.set(300,300,300);scene.add(sea);
+    flat(add(G.hex,M.sand,1,0.04,66,16,16));
 
-    // ---- montagnes en arc à l'arrière (effet d'ombre via éclairage) ----
-    for(let a=Math.PI*0.62;a<=Math.PI*2.38;a+=Math.PI*0.115){
-      const R=_rand(80,98),x=Math.cos(a)*R,z=Math.sin(a)*R,h=_rand(28,50),w=_rand(36,58);
-      add(G.cone,(Math.random()<0.5?M.mtA:M.mtB),x,h/2-3,z,w*0.5,h,w*0.5);
-      if(Math.random()<0.5)add(G.cone,M.mtB,x+_rand(-10,10),h*0.42,z+_rand(-8,8),w*0.32,h*0.7,w*0.32);
+    // ---- vallons (collines douces) en arc à l'arrière/côtés ----
+    for(let a=Math.PI*0.60;a<=Math.PI*2.40;a+=Math.PI*0.10){
+      const R=_rand(70,92),x=Math.cos(a)*R,z=Math.sin(a)*R,h=_rand(9,20),w=_rand(34,52);
+      add(G.ico,(Math.random()<0.5?M.hill:M.hill2),x,h*0.18,z,w*0.5,h,w*0.5);
     }
 
-    // ---- fleuve : serpente du fond vers la mer (devant) ----
-    const riverPts=[[7,-58],[3,-38],[-3,-18],[0,2],[6,24],[3,48],[0,72],[1,92]];
-    riverPts.forEach((p,i)=>{const w=5+i*0.5;flat(add(G.circ,M.water,p[0],0.03,p[1],w,w));});
+    // ---- fleuve : serpente du fond vers la mer ----
+    const riverPts=[[6,-56],[2,-36],[-3,-16],[0,4],[4,26],[2,48],[1,70],[1,92]];
+    riverPts.forEach((p,i)=>{const w=5+i*0.5;flat(add(G.circ,M.water,p[0],0.05,p[1],w,w));});
 
-    // ---- village : 2 immeubles, 3 maisons ----
-    add(G.box,M.bldgLit,10,6,-6,3.4,12,3.4);
-    add(G.box,M.bldg,14.5,5,-2,3.0,10,3.0);
-    function house(x,z,wall){add(G.box,wall,x,1.1,z,2.6,2.2,2.6);add(G.cone,M.roofDark,x,3.05,z,1.9,1.6,1.9);}
-    house(8,4,M.house[0]);house(12.5,5.5,M.house[1]);house(6.5,-2,M.house[2]);
+    // ---- petite ville (rive +X) : bâtiments hexagonaux uniformisés ----
+    function building(x,z,r,h,body,top){
+      add(G.hexP,body,x,h/2,z,r,h,r);
+      if(top)add(G.hexP,top,x,h+0.3,z,r*0.92,0.6,r*0.92);
+    }
+    function house(x,z){
+      add(G.hexP,M.house,x,1.1,z,1.7,2.2,1.7);
+      add(G.hexR,M.roof,x,3.0,z,2.0,1.5,2.0);
+    }
+    building(12,1,2.1,12,M.bldg,M.bldgTop);
+    building(15,-3,2.0,10,M.bldg,M.bldgTop);
+    [[8,5],[11,7],[16,4],[19,0],[17,-7],[9,-4],[13,-9],[21,-4]].forEach(p=>house(p[0],p[1]));
 
-    // ---- centre de recyclage au bord du fleuve ----
-    add(G.box,M.recy,-8,2.2,7,5,4.4,4.2);
-    add(G.box,M.recyRoof,-8,4.7,7,5.4,0.5,4.6);
-    add(G.cyl,M.recy,-8,5.6,7,0.4,1.6,0.4);            // petite cheminée/poteau
-    add(G.tor,M.recyRoof,-8,6.4,7,0.7,0.7,0.7);
-
-    // ---- usine (fumée) — sans tache noire au sol ----
-    add(G.box,M.bldg,-21,3,-9,7,6,5);
-    const stacks=[[-24,-7],[-22,-11],[-19,-8]];
+    // ---- usine (bord de ville) ----
+    building(28,-8,3.2,7,M.factory,null);
+    const stacks=[[30,-6],[28,-10],[26,-7]];
     stacks.forEach(([x,z])=>{
-      add(G.cyl,M.stack,x,6,z,0.7,12,0.7);
-      const cap=add(G.tor,M.stack,x,12,z,0.95,0.95,0.95);cap.rotation.x=Math.PI/2;
+      add(G.cyl,M.stack,x,7,z,0.7,12,0.7);
+      const cap=add(G.tor,M.stack,x,12.5,z,0.95,0.95,0.95);cap.rotation.x=Math.PI/2;
       makeSmoke(THREE,M,scene,x,12.5,z);
     });
-    const pipe=add(G.cyl,M.pipe,-16,0.5,-2,0.5,5,0.5);pipe.rotation.z=Math.PI/2;  // conduite grise vers le fleuve
+    const pipe=add(G.cyl,M.pipe,18,0.5,2,0.5,8,0.5);pipe.rotation.z=Math.PI/2;
 
-    // ---- fermes + agriculteurs ----
+    // ---- centre de recyclage au bord du fleuve ----
+    add(G.hexP,M.recy,5,2.2,8,2.4,4.4,2.4);
+    add(G.hexR,M.recyRoof,5,5.4,8,2.7,1.6,2.7);
+    const mark=add(G.tor,M.recyRoof,5,6.8,8,1.0,1.0,1.0);
+
+    // ---- fermes (champs à plat) + agriculteurs (plus petits) ----
     H3.farmers=[];
-    function farmer(x,z){
+    function farmer(x,z,body,sc){
       const g=new THREE.Group();g.position.set(x,0,z);
-      const b=new THREE.Mesh(G.cyl,M.farmBody);b.scale.set(0.42,1.1,0.42);b.position.y=1.0;g.add(b);
-      const hd=new THREE.Mesh(G.ico,M.farmHead);hd.scale.set(0.4,0.4,0.4);hd.position.y=1.8;g.add(hd);
-      const ht=new THREE.Mesh(G.cone,M.hat);ht.scale.set(0.55,0.38,0.55);ht.position.y=2.05;g.add(ht);
-      const tl=new THREE.Mesh(G.cyl,M.trunk);tl.scale.set(0.06,1.5,0.06);tl.position.set(0.42,1.0,0.18);tl.rotation.z=0.5;g.add(tl);
-      scene.add(g);H3.farmers.push({g,ph:Math.random()*6.28,spd:_rand(2.2,3.2)});
+      const b=new THREE.Mesh(G.cyl,body);b.scale.set(0.32,0.8,0.32);b.position.y=0.7;g.add(b);
+      const hd=new THREE.Mesh(G.ico,M.head);hd.scale.set(0.28,0.28,0.28);hd.position.y=1.25;g.add(hd);
+      const ht=new THREE.Mesh(G.cone,M.hat);ht.scale.set(0.4,0.28,0.4);ht.position.y=1.42;g.add(ht);
+      g.scale.set(sc,sc,sc);scene.add(g);return g;
     }
     function farm(x,z){
-      flat(add(G.box,M.field,x,0.06,z,16,0.12,11));
-      add(G.box,M.barn,x-6,1.7,z-4,4.2,3.4,5);
-      add(G.cone,M.roofRed,x-6,4.2,z-4,3.4,2.1,3.8);
-      farmer(x+_rand(-4,4),z+_rand(-3,3));farmer(x+_rand(-4,4),z+_rand(-3,3));
+      add(G.box,M.field,x,0.06,z,15,0.12,11);
+      add(G.hexP,M.barn,x-6,1.7,z-4,2.6,3.4,2.6);
+      add(G.hexR,M.roof,x-6,4.4,z-4,3.0,2.0,3.0);
+      const f1=farmer(x+_rand(-4,4),z+_rand(-3,3),M.farmBody,1);H3.farmers.push({g:f1,ph:Math.random()*6.28,spd:_rand(2.2,3.2)});
+      const f2=farmer(x+_rand(-4,4),z+_rand(-3,3),M.farmBody,1);H3.farmers.push({g:f2,ph:Math.random()*6.28,spd:_rand(2.2,3.2)});
     }
-    farm(28,-14);farm(25,17);
+    farm(34,16);farm(30,26);
 
-    // ---- forêt sur les pentes (arrière/côtés) ----
-    for(let i=0;i<22;i++){
-      const a=_rand(Math.PI*0.62,Math.PI*2.38),r=_rand(34,70),x=Math.cos(a)*r,z=Math.sin(a)*r;
+    // ---- file indienne de villageois : des immeubles vers l'usine ----
+    H3.walkers=[];H3.walkPath={a:{x:14,z:-2},b:{x:27,z:-8}};
+    for(let i=0;i<6;i++){const g=farmer(0,0,M.townBody,0.85);H3.walkers.push({g,off:i/6});}
+
+    // ---- arbres sur les pentes ----
+    for(let i=0;i<20;i++){
+      const a=_rand(Math.PI*0.60,Math.PI*2.40),r=_rand(40,72),x=Math.cos(a)*r,z=Math.sin(a)*r;
       const h=_rand(4,8),tw=_rand(0.28,0.42);
       add(G.cyl,M.trunk,x,h*0.28,z,tw,h*0.55,tw);
       const g=M.foli[(Math.random()*3)|0],base=h*0.5;
@@ -1697,15 +1709,9 @@ function initHome3D(){
       add(G.cone,M.foli[0],x,base+h*0.5,z,_rand(1.2,1.8),h*0.45);
       add(G.cone,g,x,base+h*0.85,z,_rand(0.8,1.3),h*0.4);
     }
-    // rochers dans le fleuve / à l'embouchure
-    for(let i=0;i<10;i++)add(G.dod,M.rock,_rand(-6,8),-0.1,_rand(40,95),_rand(0.5,1.3),_rand(0.4,0.9));
+    for(let i=0;i<8;i++)add(G.dod,M.rock,_rand(-4,6),-0.1,_rand(45,92),_rand(0.5,1.1),_rand(0.4,0.8));
 
-    // anneaux d'ondulation (eau vivante)
-    const rmat=new THREE.MeshStandardMaterial({color:"#8fd0cb",roughness:0.5,transparent:true,opacity:0.0});
-    for(let i=0;i<4;i++){const me=new THREE.Mesh(G.tor,rmat.clone());me.rotation.x=-Math.PI/2;me.position.set(_rand(-3,5),0.04,_rand(20,80));
-      me.userData={ph:Math.random()};scene.add(me);H3.ripples.push(me);}
-
-    // ---- SOLEIL : halo + rayons (passe derrière les montagnes) ----
+    // ---- SOLEIL : halo + rayons ----
     const glowTex=_softTex(THREE,"rgba(255,247,222,0.97)");
     const raysTex=_raysTex(THREE);
     const mkSun=(tex,col,op,sc)=>{const m=new THREE.SpriteMaterial({map:tex,color:col,transparent:true,opacity:op,depthWrite:false,depthTest:true,blending:THREE.AdditiveBlending,fog:false});const s=new THREE.Sprite(m);s.scale.set(sc,sc,1);return {s,m};};
@@ -1716,12 +1722,17 @@ function initHome3D(){
     sunG.add(rays.s);sunG.add(halo.s);sunG.add(core.s);
     scene.add(sunG);H3.sun={rays:rays.m};
 
-    // ---- nuages ----
-    const cloudTex=_softTex(THREE,"rgba(214,230,228,0.9)");
+    // ---- nuages (cumulus visibles) ----
+    const cloudTex=_softTex(THREE,"rgba(245,250,250,0.98)");
     const clouds=new THREE.Group();
-    for(let i=0;i<12;i++){const m=new THREE.SpriteMaterial({map:cloudTex,transparent:true,opacity:_rand(0.5,0.9),depthWrite:false,fog:false});
-      const sp=new THREE.Sprite(m);const a=_rand(0,Math.PI*2),r=_rand(60,150);
-      sp.position.set(Math.cos(a)*r,_rand(38,78),Math.sin(a)*r);sp.scale.set(_rand(28,58),_rand(11,22),1);clouds.add(sp);}
+    for(let i=0;i<10;i++){
+      const a=_rand(0,Math.PI*2),r=_rand(45,120),cy=_rand(20,46),cx=Math.cos(a)*r,cz=Math.sin(a)*r;
+      for(let j=0;j<4;j++){
+        const m=new THREE.SpriteMaterial({map:cloudTex,color:0xffffff,transparent:true,opacity:_rand(0.78,0.95),depthWrite:false,fog:false});
+        const sp=new THREE.Sprite(m);sp.position.set(cx+_rand(-9,9),cy+_rand(-2,3),cz+_rand(-6,6));
+        const w=_rand(16,26);sp.scale.set(w,w*_rand(0.5,0.65),1);clouds.add(sp);
+      }
+    }
     scene.add(clouds);H3.clouds=clouds;
 
     H3.renderer=renderer;H3.scene=scene;H3.cam=cam;H3.running=true;H3.last=performance.now();H3.t=0;
@@ -1772,6 +1783,9 @@ function loopHome(now){
   if(H3.clouds && !H3.reduce)H3.clouds.rotation.y+=dt*0.008;
   if(H3.sun && H3.sun.rays && !H3.reduce)H3.sun.rays.rotation+=dt*0.06;
   if(H3.farmers)H3.farmers.forEach(f=>{f.g.rotation.x=H3.reduce?0.2:Math.sin(H3.t*f.spd+f.ph)*0.32;});
+  if(H3.walkers&&H3.walkPath){const A=H3.walkPath.a,B=H3.walkPath.b,ry=Math.atan2(B.x-A.x,B.z-A.z);
+    H3.walkers.forEach(w=>{const u=(w.off+H3.t*0.03)%1,x=A.x+(B.x-A.x)*u,z=A.z+(B.z-A.z)*u;
+      w.g.position.set(x,H3.reduce?0:Math.abs(Math.sin(u*22+w.off*6))*0.12,z);w.g.rotation.y=ry;});}
   updateSmoke(dt);updateRipples(dt);
   H3.renderer.render(H3.scene,H3.cam);
 }
