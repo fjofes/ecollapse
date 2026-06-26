@@ -282,7 +282,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
       <button class="b-play" id="btn-play">Jouer</button>
       <button class="b-rules" id="btn-rules">Règle du jeu</button>
     </div>
-    <div class="version" id="app-version">V2.3</div>
+    <div class="version" id="app-version">V2.4</div>
   </div>
 </section>
 
@@ -744,6 +744,9 @@ function initGame(opts){
     gulf,
     plastic:0, plasticMax,
     durationMin,
+    turnId:0,
+    phase:{active:null, poll:0, acted:false},
+    done:{produce:false, build:false, recycle:false},
     round:1, cur:0,
     deck:buildDeck(opts.cat),
     weather:null,         // carte météo active du tour de table
@@ -873,17 +876,21 @@ function applyCatastrophe(p,ev){
 
 function autoPlaceBoardPollution(p){
   const elig=eligiblePollutionCells(p);
-  if(elig.length){ p.board[elig[0]]={kind:"pollution",lvl:1}; }
-  else {
-    // pas de place : escalade Niv.1 -> Niv.2 (règle simplifiée)
-    const l1=boardPollution(p).find(x=>x.lvl===1);
-    if(l1 && p.board[l1.k].lvl<3){ p.board[l1.k].lvl++; }
+  if(elig.length){ p.board[elig[0]]={kind:"pollution",lvl:1,turn:G.turnId}; return; }
+  // plus de place sur le plateau : on tente une case du Gulf Stream du joueur (un pion ne peut JAMAIS être augmenté)
+  for(let k=0;k<3;k++){
+    const idx=(p.gulfStart+k)%G.gulf.length;
+    if(G.gulf[idx].tokens.length<3){ G.gulf[idx].tokens.push({lvl:1,turn:G.turnId}); return; }
   }
+  log("⚠️ "+p.name+" : aucune place pour 1 pollution (plateau et Gulf Stream saturés).");
 }
 
 function startTurn(){
   const p=cur();
   p.didBuild=false; p.didProduce=false;
+  G.turnId=(G.turnId||0)+1;                 // identifiant de tour (pour "pas de recyclage la pollution du tour")
+  G.phase={active:null, poll:0, acted:false};
+  G.done={produce:false, build:false, recycle:false};
   // reset utilisation bâtiments
   allBuildings(p).forEach(b=>{b.usedProd=false;b.usedRecy=false;});
 
@@ -954,33 +961,63 @@ function cur(){return G.players[G.cur];}
 function setPending(obj){ G.pending=obj; render(); }
 function clearPending(){ G.pending=null; render(); }
 
+/* ---- helpers PHASES ---- */
+function phaseBlocked(ph){
+  if(G.done[ph]){ setHint("Vous avez déjà fait votre phase de "+phaseName(ph)+" ce tour."); return true; }
+  if(G.phase.active && G.phase.active!==ph){ setHint("Terminez d'abord la phase de "+phaseName(G.phase.active)+" en cours."); return true; }
+  return false;
+}
+function phaseName(ph){return {produce:"production",build:"construction",recycle:"recyclage"}[ph]||ph;}
+function finishBtn(label){return `<div class="mini"><button class="ghost" onclick="finishPhase()">✅ ${label}</button></div>`;}
+function markPhaseDone(){
+  const ph=G.phase.active;
+  if(ph) G.done[ph]=G.phase.acted;       // ne consomme la phase que si une action a eu lieu
+  G.phase={active:null, poll:0, acted:false};
+  G.pending=null; render();
+  setHint("Phase terminée. Choisissez une autre phase ou terminez le tour.");
+}
+function finishPhase(){
+  if(!G.phase.active) return;
+  const p=cur(), ph=G.phase.active;
+  if((ph==="produce"||ph==="build") && G.phase.poll>0){
+    beginPollutionPlacement(p, G.phase.poll, ph);   // placer toute la pollution générée par la phase
+    G.phase.poll=0;
+  }else{
+    markPhaseDone();
+  }
+}
+
 /* ---- PRODUCTION ---- */
 function startProduce(){
   const p=cur();
+  if(phaseBlocked("produce")) return;
   const producers=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&B[c.type].produces&&!c.usedProd);
   if(!producers.length){ setHint("Aucun bâtiment de production disponible (déjà utilisés ou non construits)."); return; }
+  G.phase={active:"produce", poll:0, acted:false};
   setPending({mode:"produce"});
-  setHint("<b>Production.</b> Touchez une ferme, usine ou centrale (clignotante) pour produire. Chaque usage génère 1 pollution.");
+  setHint("<b>Production.</b> Touchez les fermes/usines/centrales à faire produire (autant que voulu). Chaque usage génère 1 pollution, placée à la fin de la phase."+finishBtn("Terminer la production"));
 }
 function doProduce(p,key){
   const c=p.board[key];
   const def=B[c.type];
   let qty=def.output[c.lvl];
-  // modificateur météo
   if(G.weather && G.weather.mod && G.weather.mod[c.type]) qty=Math.max(0,qty+G.weather.mod[c.type]);
   p.res[def.produces]+=qty;
   c.usedProd=true; p.didProduce=true;
+  G.phase.poll++; G.phase.acted=true;
   log("⚙️ "+p.name+" : "+def.name+" Niv."+c.lvl+" produit "+qty+RES[def.produces].ic+".");
-  // 1 pollution à placer
-  beginPollutionPlacement(p,1,"produce");
+  render();
+  setHint(`<b>Production.</b> +${qty}${RES[def.produces].ic} — pollution en attente : <b>${G.phase.poll}</b>. Continuez ou terminez.`+finishBtn("Terminer la production"));
 }
 
 /* ---- CONSTRUCTION ---- */
 function startBuild(){
   const p=cur();
+  if(phaseBlocked("build")) return;
+  G.phase={active:"build", poll:0, acted:false};
   setPending({mode:"build"});
   const pawns=Object.values(p.board).filter(c=>c.kind==="pawn").length;
-  setHint(`<b>Construction.</b> Touchez un <b>pion construction</b> (${pawns}) pour bâtir, ou un bâtiment pour l'améliorer. Chaque action génère 1 pollution.`);
+  setHint(`<b>Construction.</b> Touchez un <b>pion construction</b> (${pawns}) pour bâtir, ou un bâtiment pour l'améliorer. Chaque action génère 1 pollution, placée en fin de phase.`+finishBtn("Terminer la construction"));
 }
 function openBuildMenu(p,key){
   // construire sur un pion
@@ -1004,12 +1041,11 @@ function buildOnPawn(p,key,type){
   if(!canPay(p,cost)) return;
   pay(p,cost);
   placeBuilding(p,key,type,1);
-  p.didBuild=true;
+  p.didBuild=true; G.phase.poll++; G.phase.acted=true;
   log("🏗️ "+p.name+" construit "+B[type].name+" Niv.1.");
   closeModal();
-  // habitation -> pions construction
-  if(type==="habitation") grantPawns(p,1);
-  beginPollutionPlacement(p,1,"build");
+  if(type==="habitation"){ startPlacePawns(p,1); }   // choix d'emplacement des pions
+  else { render(); buildHint(p); }
 }
 function openUpgradeMenu(p,key){
   const c=p.board[key];
@@ -1043,22 +1079,38 @@ function upgradeTo(p,key,target){
   if(!canPay(p,cost)) return;
   if(type==="recyclage" && B.recyclage.reqRecy[target] && p.res.recy<B.recyclage.reqRecy[target]) return;
   pay(p,cost);
-  c.lvl=target; p.didBuild=true;
+  c.lvl=target; p.didBuild=true; G.phase.poll++; G.phase.acted=true;
   log("⬆️ "+p.name+" : "+B[type].name+" Niv."+from+" → Niv."+target+".");
   closeModal();
-  if(type==="habitation") grantPawns(p, target); // pions = niveau atteint (livret p.5)
-  beginPollutionPlacement(p,1,"build");
+  if(type==="habitation"){ startPlacePawns(p, target); }   // pions = niveau atteint, à placer
+  else { render(); buildHint(p); }
 }
-function grantPawns(p,count){
-  // place chaque pion sur case vide adjacente à bâtiment/pion ; sinon réserve
-  let placed=0, toReserve=0;
-  for(let i=0;i<count;i++){
+function buildHint(p){
+  const pawns=Object.values(p.board).filter(c=>c.kind==="pawn").length;
+  setHint(`<b>Construction.</b> Pollution en attente : <b>${G.phase.poll}</b>. Pions disponibles : ${pawns}. Continuez ou terminez.`+finishBtn("Terminer la construction"));
+}
+function startPlacePawns(p,count){
+  render();
+  const elig=eligiblePawnCells(p);
+  if(count<=0){ buildHint(p); return; }
+  if(elig.length===0){ p.reservePawns=(p.reservePawns||0)+count; log("📦 "+p.name+" : "+count+" pion(s) en réserve (plateau saturé)."); render(); buildHint(p); return; }
+  G.pending={mode:"placePawns", remaining:count};
+  render();
+  setHint(`<b>Placez ${count} pion(s) construction.</b> Touchez une case libre <b>adjacente</b> à un bâtiment ou un pion (clignotante).`);
+}
+function placePawnOnBoard(p,key){
+  if(!G.pending||G.pending.mode!=="placePawns") return;
+  if(!eligiblePawnCells(p).includes(key)){ setHint("Case invalide : choisissez une case libre adjacente à un bâtiment/pion."); return; }
+  p.board[key]={kind:"pawn"};
+  log("👷 "+p.name+" place un pion construction.");
+  G.pending.remaining--;
+  if(G.pending.remaining>0){
     const elig=eligiblePawnCells(p);
-    if(elig.length){ p.board[elig[0]]={kind:"pawn"}; placed++; }
-    else { p.reservePawns++; toReserve++; }
+    if(elig.length===0){ p.reservePawns=(p.reservePawns||0)+G.pending.remaining; log("📦 "+p.name+" : "+G.pending.remaining+" pion(s) en réserve (plateau saturé)."); G.pending=null; render(); buildHint(p); return; }
+    render(); setHint(`<b>Placez encore ${G.pending.remaining} pion(s) construction.</b>`);
+  }else{
+    G.pending={mode:"build"}; render(); buildHint(p);
   }
-  if(placed) log("👷 "+p.name+" reçoit "+placed+" pion(s) construction.");
-  if(toReserve) log("📦 "+p.name+" : "+toReserve+" pion(s) en réserve (plateau saturé).");
 }
 function eligiblePawnCells(p){
   // case vide adjacente à un bâtiment ou un pion
@@ -1086,7 +1138,7 @@ function eligiblePollutionCells(p){
 }
 function placePollutionOnBoard(p,key){
   if(!G.pending||G.pending.mode!=="placePollution") return;
-  p.board[key]={kind:"pollution",lvl:1};
+  p.board[key]={kind:"pollution",lvl:1,turn:G.turnId};
   log("☁️ "+p.name+" place 1 pollution Niv.1 sur son plateau.");
   afterPollutionPlaced(p);
 }
@@ -1095,23 +1147,25 @@ function placePollutionOnGulf(slotIdx,lvl){
   if(!G.pending||G.pending.mode!=="placePollution") return;
   const slot=G.gulf[slotIdx];
   if(slot.tokens.length>=3){ setHint("Cette case du Gulf Stream est pleine (max 3)."); return; }
-  slot.tokens.push(lvl);
+  slot.tokens.push({lvl, turn:G.turnId});
   log("🌊 "+p.name+" place 1 pollution Niv."+lvl+" sur le Gulf Stream.");
   afterPollutionPlaced(p);
 }
 function afterPollutionPlaced(p){
   G.pending.remaining--;
-  if(G.pending.remaining<=0){ G.pending=null; setHint("Pollution placée. Continuez vos actions ou terminez le tour."); render(); }
+  if(G.pending.remaining<=0){ markPhaseDone(); }
   else{ render(); setHint(`Encore ${G.pending.remaining} pollution à placer.`); }
 }
 
 /* ---- RECYCLAGE ---- */
 function startRecycle(){
   const p=cur();
+  if(phaseBlocked("recycle")) return;
   const centers=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy);
   if(!centers.length){ setHint("Aucun centre de recyclage disponible."); return; }
+  G.phase={active:"recycle", poll:0, acted:false};
   setPending({mode:"recycleSelect"});
-  setHint("<b>Recyclage.</b> Touchez un <b>centre de recyclage</b> (clignotant) à activer.");
+  setHint("<b>Recyclage.</b> Touchez un <b>centre de recyclage</b> (clignotant) à activer. Rappel : on ne recycle pas une pollution produite ce tour-ci."+finishBtn("Terminer le recyclage"));
 }
 function selectRecycleCenter(p,key){
   const c=p.board[key];
@@ -1127,8 +1181,10 @@ function recycleGulfToken(slotIdx){
   if(!isMyGulfSlot(p,slotIdx)){ setHint("Vous ne pouvez recycler que votre portion du Gulf Stream."); return; }
   const slot=G.gulf[slotIdx];
   if(!slot.tokens.length){ return; }
-  const lvl=slot.tokens.pop();
-  pe.removedGulf.push({idx:slotIdx,lvl});
+  // on recycle le jeton le plus ancien ; interdit si produit ce tour-ci
+  if(slot.tokens[0].turn===G.turnId){ setHint("Impossible de recycler une pollution produite ce tour-ci."); return; }
+  const tok=slot.tokens.shift();
+  pe.removedGulf.push({idx:slotIdx, tok});
   pe.picked.push({src:"gulf"}); pe.gulfPicked++;
   render(); updateRecycleHint();
 }
@@ -1139,7 +1195,8 @@ function recycleBoardToken(key){
   const [cq,cr]=pe.center.split(",").map(Number);
   if(!neighborsKeys(cq,cr).includes(key)){ setHint("Cette pollution n'est pas adjacente au centre."); return; }
   if(p.board[key].kind!=="pollution") return;
-  pe.removedBoard.push({key, lvl:p.board[key].lvl});
+  if(p.board[key].turn===G.turnId){ setHint("Impossible de recycler une pollution produite ce tour-ci."); return; }
+  pe.removedBoard.push({key, lvl:p.board[key].lvl, turn:p.board[key].turn});
   p.board[key]={kind:"empty"};
   pe.picked.push({src:"board"});
   render(); updateRecycleHint();
@@ -1157,10 +1214,15 @@ function updateRecycleHint(){
 function cancelRecycle(){
   const pe=G.pending; const p=cur();
   if(pe&&pe.mode==="recycleRun"){
-    pe.removedGulf.forEach(g=>{ if(G.gulf[g.idx].tokens.length<3) G.gulf[g.idx].tokens.push(g.lvl); });
-    pe.removedBoard.forEach(b=>{ if(p.board[b.key].kind==="empty") p.board[b.key]={kind:"pollution",lvl:b.lvl}; });
+    pe.removedGulf.forEach(g=>{ if(G.gulf[g.idx].tokens.length<3) G.gulf[g.idx].tokens.unshift(g.tok); });
+    pe.removedBoard.forEach(b=>{ if(p.board[b.key].kind==="empty") p.board[b.key]={kind:"pollution",lvl:b.lvl,turn:b.turn}; });
   }
-  clearPending(); setHint("Recyclage annulé.");
+  if(G.phase && G.phase.active==="recycle"){
+    setPending({mode:"recycleSelect"});
+    setHint("Sélection annulée. Touchez un centre de recyclage, ou terminez la phase."+finishBtn("Terminer le recyclage"));
+  }else{
+    clearPending(); setHint("Recyclage annulé.");
+  }
 }
 function confirmRecycle(){
   const p=cur(), pe=G.pending;
@@ -1178,8 +1240,17 @@ function confirmRecycle(){
     return;
   }
   log(`♻️ ${p.name} recycle ${pe.picked.length} pollution(s) (+${pts}♻️).`);
-  G.pending=null; render();
-  setHint("Recyclage effectué. Continuez ou terminez le tour.");
+  G.pending=null; afterRecycleDone(p);
+}
+function afterRecycleDone(p){
+  G.phase.acted=true;
+  const left=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy);
+  if(left.length){
+    setPending({mode:"recycleSelect"});
+    setHint("Recyclage effectué. Touchez un autre centre de recyclage, ou terminez la phase."+finishBtn("Terminer le recyclage"));
+  }else{
+    markPhaseDone();
+  }
 }
 function askResourceGain(p,gain,pts,total){
   // choisir gain énergie/MP, "gain" fois
@@ -1188,7 +1259,7 @@ function askResourceGain(p,gain,pts,total){
     if(remaining<=0){
       chosen.forEach(r=>p.res[r]++);
       log(`♻️ ${p.name} recycle ${total} pollution(s) (+${pts}♻️, +${chosen.map(r=>RES[r].ic).join("")}).`);
-      closeModal(); render(); setHint("Recyclage effectué. Continuez ou terminez le tour.");
+      closeModal(); afterRecycleDone(p);
       return;
     }
     showChoiceModal({
@@ -1265,10 +1336,12 @@ function renderBoard(p){
   const connKeys=new Set(COAST_CONNECTED);
   const pe=G.pending;
   const eligPoll = (pe&&pe.mode==="placePollution")? new Set(eligiblePollutionCells(p)) : new Set();
+  const eligPawn = (pe&&pe.mode==="placePawns")? new Set(eligiblePawnCells(p)) : new Set();
   const eligBuild = (pe&&pe.mode==="build");
   const recRun = (pe&&pe.mode==="recycleRun")? pe : null;
   let recBoardElig=new Set();
-  if(recRun){ const [cq,cr]=recRun.center.split(",").map(Number); recBoardElig=new Set(neighborsKeys(cq,cr).filter(k=>p.board[k].kind==="pollution")); }
+  if(recRun){ const [cq,cr]=recRun.center.split(",").map(Number);
+    recBoardElig=new Set(neighborsKeys(cq,cr).filter(k=>p.board[k].kind==="pollution" && p.board[k].turn!==G.turnId)); }
   const recSelect = (pe&&pe.mode==="recycleSelect");
 
   let html="";
@@ -1295,6 +1368,7 @@ function renderBoard(p){
     }
     // surbrillances
     if(eligBuild && (c.kind==="pawn"||c.kind==="building")) cls+=" cell-elig";
+    if(eligPawn.has(cell.key)) cls+=" cell-elig";
     if(eligPoll.has(cell.key)) cls+=" cell-elig";
     if(recBoardElig.has(cell.key)) cls+=" cell-recyc-src";
     if(recSelect && c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy) cls+=" cell-elig";
@@ -1340,13 +1414,13 @@ function renderGulf(p){
     let cls="slot";
     if(mine) cls+=" mine";
     if(placing && mine && slot.tokens.length<3) cls+=" elig";
-    if(recRun && mine && slot.tokens.length>0) cls+=" elig";
+    if(recRun && mine && slot.tokens.length>0 && slot.tokens[0].turn!==G.turnId) cls+=" elig";
     const fill = slot.tokens.length? "#c9bfa4" : "rgba(0,0,0,.18)";
     const stroke = mine? "#fff" : "rgba(255,255,255,.25)";
     html+=`<circle class="${cls}" cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${mine?2.5:1.2}" data-slot="${i}" style="cursor:${(placing&&mine)||(recRun&&mine)?'pointer':'default'}"/>`;
     if(slot.tokens.length){
       html+=`<text x="${x}" y="${y-2}" text-anchor="middle" style="font-size:${fsz}px;font-weight:900;fill:#3a3320">${slot.tokens.length}</text>`;
-      if(r>=12) html+=`<text x="${x}" y="${y+11}" text-anchor="middle" style="font-size:8px;fill:#6b6248">${slot.tokens.join("·")}</text>`;
+      if(r>=12) html+=`<text x="${x}" y="${y+11}" text-anchor="middle" style="font-size:8px;fill:#6b6248">${slot.tokens.map(t=>t.lvl).join("·")}</text>`;
     }else{
       html+=`<text x="${x}" y="${y+3}" text-anchor="middle" style="font-size:${Math.max(7,fsz-2)}px;fill:rgba(255,255,255,.35)">${slot.num}</text>`;
     }
@@ -1397,18 +1471,34 @@ function renderLog(){
   $("log").innerHTML=G.log.slice(0,40).map(l=>`<div>${l}</div>`).join("");
 }
 
+function setActLabel(id,ic,txt){ const el=$(id); if(el) el.innerHTML=`<span class="a-ic">${ic}</span>${txt}`; }
 function syncActionButtons(){
   const pe=G.pending;
-  const busy=m=>pe&&pe.mode===m;
-  $("act-produce").classList.toggle("busy",busy("produce"));
-  $("act-build").classList.toggle("busy",busy("build"));
-  $("act-recycle").classList.toggle("busy",busy("recycleSelect")||busy("recycleRun"));
-  const lock = pe&&pe.mode==="placePollution";
+  const ph=(G.phase&&G.phase.active)||null;
+  const done=G.done||{produce:false,build:false,recycle:false};
+  // état "occupé" (placement en cours) : on verrouille tout
+  const placing = pe && (pe.mode==="placePollution"||pe.mode==="placePawns");
   const notMyTurn = NET.online && G.cur!==NET.seat;
-  ["act-produce","act-build","act-recycle","act-trade","act-end"].forEach(id=>$(id).disabled=!!lock||notMyTurn);
+  // libellés : la phase active devient "Terminer …"
+  setActLabel("act-produce","⚙️", ph==="produce"?"Terminer prod.":"Produire");
+  setActLabel("act-build","🏗️", ph==="build"?"Terminer constr.":"Construire");
+  setActLabel("act-recycle","♻️", ph==="recycle"?"Terminer recyc.":"Recycler");
+  $("act-produce").classList.toggle("busy",ph==="produce");
+  $("act-build").classList.toggle("busy",ph==="build");
+  $("act-recycle").classList.toggle("busy",ph==="recycle");
+  // disponibilité
+  function dis(id,phase){
+    const el=$(id); if(!el) return;
+    let d = notMyTurn || placing;
+    if(ph && ph!==phase) d=true;        // une autre phase est en cours
+    if(!ph && done[phase]) d=true;      // phase déjà faite ce tour
+    el.disabled=d;
+  }
+  dis("act-produce","produce"); dis("act-build","build"); dis("act-recycle","recycle");
+  $("act-trade").disabled = notMyTurn || placing || !!ph;     // échange hors phase active
+  $("act-end").disabled   = notMyTurn || placing || !!ph;     // on termine une phase avant de finir le tour
   if(NET.online){
-    if(notMyTurn){ $("p-turn").textContent="tour de "+cur().name+" — observez"; }
-    else{ $("p-turn").textContent="à vous de jouer"; }
+    $("p-turn").textContent = notMyTurn ? ("tour de "+cur().name+" — observez") : "à vous de jouer";
   }
 }
 
@@ -1426,6 +1516,8 @@ function onBoardClick(key){
     if(c.kind==="pawn") openBuildMenu(p,key);
     else if(c.kind==="building") openUpgradeMenu(p,key);
     else setHint("Touchez un pion construction (bâtir) ou un bâtiment (améliorer).");
+  }else if(pe.mode==="placePawns"){
+    placePawnOnBoard(p,key);
   }else if(pe.mode==="produce"){
     if(c.kind==="building"&&B[c.type].produces&&!c.usedProd) doProduce(p,key);
     else setHint("Touchez une ferme, usine ou centrale non encore utilisée.");
@@ -1852,7 +1944,7 @@ window.addEventListener("resize",resizeHome);
 
 /* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
 /* Version de l'application — incrémenter à chaque nouvelle build. */
-const APP_VERSION = "V2.3";
+const APP_VERSION = "V2.4";
 if($("app-version")) $("app-version").textContent = APP_VERSION;
 
 (function startHome(){
@@ -1863,11 +1955,12 @@ if($("app-version")) $("app-version").textContent = APP_VERSION;
 })();
 
 /* action buttons */
-$("act-produce").onclick=()=>{ if(G.pending&&G.pending.mode==="produce"){clearPending();setHint("Production interrompue.");}else startProduce(); };
-$("act-build").onclick=()=>{ if(G.pending&&G.pending.mode==="build"){clearPending();setHint("Construction interrompue.");}else startBuild(); };
-$("act-recycle").onclick=()=>{ if(G.pending&&(G.pending.mode==="recycleSelect")){clearPending();setHint("Recyclage interrompu.");}else startRecycle(); };
+$("act-produce").onclick=()=>{ if(G.phase&&G.phase.active==="produce") finishPhase(); else startProduce(); };
+$("act-build").onclick=()=>{ if(G.phase&&G.phase.active==="build") finishPhase(); else startBuild(); };
+$("act-recycle").onclick=()=>{ if(G.phase&&G.phase.active==="recycle") finishPhase(); else startRecycle(); };
 $("act-trade").onclick=()=>startTrade();
-$("act-end").onclick=()=>{ if(G.pending&&G.pending.mode==="placePollution"){setHint("Placez d'abord la pollution en attente.");return;} closeModal(); endTurn(); };
+$("act-end").onclick=()=>{ if(G.phase&&G.phase.active){ setHint("Terminez d'abord la phase en cours."); return; } if(G.pending&&(G.pending.mode==="placePollution"||G.pending.mode==="placePawns")){ setHint("Terminez d'abord le placement en cours."); return; } closeModal(); endTurn(); };
+window.finishPhase=finishPhase;
 
 // expose pour les boutons inline du hint
 window.confirmRecycle=confirmRecycle;
