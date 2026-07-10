@@ -1556,10 +1556,148 @@ function aiPlaceBoard(p){
   const st=Object.keys(p.board).find(k=>p.board[k].kind==="pollution"&&p.board[k].lvl<3); if(st){ p.board[st].lvl++; p.board[st].turn=G.turnId; return true; }
   return false;
 }
+/* Profil stratégique stable par joueur : dérivé de son objectif secret + personnalité aléatoire (graine = index). */
+function aiRand(p){ p._aiSeed=((p._aiSeed==null?(p.i*2654435761)>>>0:p._aiSeed)*1664525+1013904223)>>>0; return p._aiSeed/4294967296; }
+function aiProfile(p){
+  if(p._aiProf) return p._aiProf;
+  const persos=[
+    {pref:["usine","centrale","ferme"], upBias:0.7, recyBias:0.3},   // industriel
+    {pref:["ferme","usine","centrale"], upBias:0.5, recyBias:0.5},   // fermier équilibré
+    {pref:["centrale","usine","ferme"], upBias:0.6, recyBias:0.6},   // énergéticien recycleur
+    {pref:["habitation","ferme","usine"], upBias:0.4, recyBias:0.4}, // expansionniste
+  ];
+  const base=persos[(p.i + Math.floor(aiRand(p)*4))%persos.length];
+  const prof={pref:base.pref.slice(), upBias:base.upBias, recyBias:base.recyBias,
+    focusType:null, wantHab3:false, wantLvl3NoHab:0, noLvl3:false, allLvl2:false,
+    hoard:false, recyFocus:false, cleanBoard:false, oneOfEach:false};
+  const o=p.objective; const id=o&&o.id;
+  if(id==="agrar"){ prof.focusType="ferme"; }
+  else if(id==="grid"){ prof.focusType="centrale"; }
+  else if(id==="indus"){ prof.focusType="usine"; }
+  else if(id==="urban"){ prof.wantHab3=true; }
+  else if(id==="techno"){ prof.wantLvl3NoHab=3; prof.upBias=0.85; }
+  else if(id==="master"){ prof.wantLvl3NoHab=5; prof.upBias=0.95; }
+  else if(id==="engi"){ prof.allLvl2=true; prof.upBias=0.9; }
+  else if(id==="spec"){ prof.focusType=prof.pref[0]==="habitation"?"usine":prof.pref[0]; }
+  else if(id==="tri"){ prof.focusType="recyclage"; prof.recyFocus=true; }
+  else if(id==="extreme"){ prof.recyFocus=true; prof.recyBias=1; }
+  else if(id==="capi"){ prof.hoard=true; prof.upBias=0.35; }
+  else if(id==="clean"){ prof.cleanBoard=true; }
+  else if(id==="auto"){ prof.oneOfEach=true; }
+  else if(id==="puriste"){ prof.noLvl3=true; prof.upBias=0.5; }
+  if(prof.focusType && prof.pref[0]!==prof.focusType){ prof.pref=[prof.focusType].concat(prof.pref.filter(t=>t!==prof.focusType)); }
+  p._aiProf=prof; return prof;
+}
+function aiIsLeading(p){ const scores=G.players.map(q=>quickVP(q)); return quickVP(p)>=Math.max(...scores); }
+/* Placement de pollution stratégique : plateau vs golfe selon objectif, marge du continent et position au score. */
 function aiPlacePollution(p){
+  const prof=aiProfile(p);
   let n=G.phase.poll;
-  while(n-->0){ if(!aiPlaceGulf(p) && !aiPlaceBoard(p)) break; }
+  while(n-->0){
+    let toGulf;
+    if(prof.cleanBoard) toGulf=true;                                    // objectif plateau propre
+    else{
+      const margin=G.plasticMax-G.plastic;
+      const closing=margin<=Math.max(3,G.n*2);
+      if(closing) toGulf=aiIsLeading(p);                                // en tête -> précipiter la fin ; sinon retenir
+      else{
+        const gulfLoad=aiMyGulfPoll(p);
+        const boardLoad=Object.values(p.board).filter(c=>c.kind==="pollution").length;
+        toGulf = (gulfLoad<=boardLoad) ? (aiRand(p)<0.65) : (aiRand(p)<0.35);   // équilibre + hasard
+      }
+    }
+    let done=false;
+    if(toGulf) done=aiPlaceGulf(p)||aiPlaceBoard(p);
+    else done=aiPlaceBoard(p)||aiPlaceGulf(p);
+    if(!done) break;
+  }
   G.phase.poll=0; markPhaseDone();
+}
+function aiPickBuildType(p){
+  const prof=aiProfile(p);
+  const cnt=t=>Object.values(p.board).filter(c=>c.kind==="building"&&c.type===t).length;
+  const can=t=>canPay(p,B[t].cost[1]) && !(t==="recyclage" && p.res.recy<(B.recyclage.reqRecy[1]||0));
+  // recyclage si pression pollution ou focus recyclage
+  const pressure=aiMyGulfPoll(p)>=2 || Object.values(p.board).filter(c=>c.kind==="pollution").length>=2;
+  if((prof.recyFocus||pressure) && (prof.focusType==="recyclage"? cnt("recyclage")<3 : cnt("recyclage")<1+ (prof.recyBias>0.5?1:0)) && can("recyclage")) return "recyclage";
+  // objectif "un de chaque"
+  if(prof.oneOfEach){ for(const t of ["ferme","usine","centrale","recyclage","habitation"]) if(cnt(t)===0 && can(t)) return t; }
+  // type focalisé par l'objectif (viser 3 exemplaires)
+  if(prof.focusType && prof.focusType!=="recyclage" && cnt(prof.focusType)<3 && can(prof.focusType)) return prof.focusType;
+  // habitations pour les pions (urban / expansion)
+  if((prof.wantHab3||prof.pref[0]==="habitation") && cnt("habitation")<3 && can("habitation")) return "habitation";
+  // capitaliste : construire peu, garder le stock (>=15)
+  if(prof.hoard && (p.res.food+p.res.energy+p.res.raw)<=17) return null;
+  // préférences de personnalité (avec un peu de hasard)
+  const order=prof.pref.slice(); if(aiRand(p)<0.3) order.push(order.shift());
+  for(const t of order) if(t!=="habitation" && can(t)) return t;
+  if(can("habitation")) return "habitation";
+  return null;
+}
+function aiUpgradeCandidates(p){
+  const prof=aiProfile(p);
+  const list=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&c.lvl<3).map(([k,c])=>({k,c}));
+  return list.filter(({c})=>{
+    if(prof.noLvl3 && c.lvl>=2) return false;                 // puriste : jamais Niv.3
+    return true;
+  }).sort((a,b)=>{
+    const s=x=>{
+      let v=0;
+      if(prof.allLvl2 && x.c.lvl===1) v-=100;                                    // ingénieur : tout au Niv.2 d'abord
+      if(prof.focusType && x.c.type===prof.focusType) v-=50;                     // objectif de type
+      if(prof.wantHab3 && x.c.type==="habitation") v-=50;
+      if(prof.wantLvl3NoHab && x.c.type!=="habitation" && x.c.lvl===2) v-=40;    // techno/master : finir des Niv.3
+      if(prof.recyFocus && x.c.type==="recyclage") v-=45;
+      v+=x.c.lvl;                                                                // moins cher d'abord
+      return v;
+    };
+    return s(a)-s(b);
+  });
+}
+function aiBuild(p){
+  const prof=aiProfile(p);
+  G.phase={active:"build",poll:0,acted:false};
+  let guard=0;
+  while(guard++<6){
+    let did=false;
+    // améliorer selon la stratégie (upBias = appétence à améliorer vs construire)
+    if(aiRand(p)<prof.upBias){
+      for(const {k,c} of aiUpgradeCandidates(p)){
+        const target=c.lvl+1, cost=aiCumulCost(c.type,c.lvl,target);
+        if(!canPay(p,cost)) continue;
+        if(c.type==="recyclage" && B.recyclage.reqRecy[target] && p.res.recy<B.recyclage.reqRecy[target]) continue;
+        if(prof.hoard){ const tot=p.res.food+p.res.energy+p.res.raw, spend=Object.values(cost).reduce((a,b)=>a+b,0); if(tot-spend<15) continue; }
+        pay(p,cost); c.lvl=target; p.didBuild=true; G.phase.poll++; G.phase.acted=true;
+        log("🤖⬆️ "+p.name+" améliore "+B[c.type].name+" en Niv."+target+".");
+        if(c.type==="habitation") aiGrantPawns(p,target);
+        did=true; break;
+      }
+    }
+    if(did) continue;
+    // construire sur un pion
+    const pk=Object.keys(p.board).find(k=>p.board[k].kind==="pawn");
+    if(!pk) { if(!aiTryUpgradeFallback(p)) break; else continue; }
+    const type=aiPickBuildType(p);
+    if(!type){ if(!aiTryUpgradeFallback(p)) break; else continue; }
+    if(prof.hoard){ const tot=p.res.food+p.res.energy+p.res.raw, spend=Object.values(B[type].cost[1]).reduce((a,b)=>a+b,0); if(tot-spend<15) break; }
+    pay(p,B[type].cost[1]); placeBuilding(p,pk,type,1); p.didBuild=true; G.phase.poll++; G.phase.acted=true;
+    log("🤖🏗️ "+p.name+" construit "+B[type].name+".");
+    if(type==="habitation") aiGrantPawns(p,1);
+  }
+  aiPlacePollution(p);
+}
+function aiTryUpgradeFallback(p){
+  for(const {k,c} of aiUpgradeCandidates(p)){
+    const target=c.lvl+1, cost=aiCumulCost(c.type,c.lvl,target);
+    if(!canPay(p,cost)) continue;
+    if(c.type==="recyclage" && B.recyclage.reqRecy[target] && p.res.recy<B.recyclage.reqRecy[target]) continue;
+    if(aiProfile(p).hoard){ const tot=p.res.food+p.res.energy+p.res.raw, spend=Object.values(cost).reduce((a,b)=>a+b,0); if(tot-spend<15) return false; }
+    pay(p,cost); c.lvl=target; p.didBuild=true; G.phase.poll++; G.phase.acted=true;
+    log("🤖⬆️ "+p.name+" améliore "+B[c.type].name+" en Niv."+target+".");
+    if(c.type==="habitation") aiGrantPawns(p,target);
+    return true;
+  }
+  return false;
 }
 function aiProduce(p){
   const producers=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&B[c.type].produces&&!c.usedProd);
@@ -1575,44 +1713,6 @@ function aiProduce(p){
 }
 function aiGrantPawns(p,count){ for(let i=0;i<count;i++){ const e=eligiblePawnCells(p); if(e.length) p.board[e[0]]={kind:"pawn"}; else p.reservePawns=(p.reservePawns||0)+1; } }
 function aiCumulCost(type,from,target){ let cost={}; for(let l=from+1;l<=target;l++) for(const [k,v] of Object.entries(B[type].cost[l])) cost[k]=(cost[k]||0)+v; return cost; }
-function aiPickBuildType(p){
-  const has=t=>Object.values(p.board).some(c=>c.kind==="building"&&c.type===t);
-  const boardPoll=Object.values(p.board).filter(c=>c.kind==="pollution").length;
-  if(!has("recyclage") && (boardPoll>0 || aiMyGulfPoll(p)>0) && canPay(p,B.recyclage.cost[1]) && p.res.recy>=(B.recyclage.reqRecy[1]||0)) return "recyclage";
-  for(const t of ["ferme","usine","centrale"]) if(!has(t) && canPay(p,B[t].cost[1])) return t;
-  if(canPay(p,B.habitation.cost[1])) return "habitation";
-  for(const t of ["ferme","usine","centrale"]) if(canPay(p,B[t].cost[1])) return t;
-  return null;
-}
-function aiBuild(p){
-  G.phase={active:"build",poll:0,acted:false};
-  let guard=0;
-  while(guard++<6){
-    // améliorer : recyclage puis habitation puis producteurs
-    const order={recyclage:0,habitation:1,ferme:2,usine:2,centrale:2};
-    const ups=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&c.lvl<3).map(([k,c])=>({k,c})).sort((a,b)=>order[a.c.type]-order[b.c.type]);
-    let did=false;
-    for(const {k,c} of ups){
-      const target=c.lvl+1, cost=aiCumulCost(c.type,c.lvl,target);
-      if(!canPay(p,cost)) continue;
-      if(c.type==="recyclage" && B.recyclage.reqRecy[target] && p.res.recy<B.recyclage.reqRecy[target]) continue;
-      pay(p,cost); c.lvl=target; p.didBuild=true; G.phase.poll++; G.phase.acted=true;
-      log("🤖⬆️ "+p.name+" améliore "+B[c.type].name+" en Niv."+target+".");
-      if(c.type==="habitation") aiGrantPawns(p,target);
-      did=true; break;
-    }
-    if(did) continue;
-    // construire sur un pion
-    const pk=Object.keys(p.board).find(k=>p.board[k].kind==="pawn");
-    if(!pk) break;
-    const type=aiPickBuildType(p);
-    if(!type || !canPay(p,B[type].cost[1])) break;
-    pay(p,B[type].cost[1]); placeBuilding(p,pk,type,1); p.didBuild=true; G.phase.poll++; G.phase.acted=true;
-    log("🤖🏗️ "+p.name+" construit "+B[type].name+".");
-    if(type==="habitation") aiGrantPawns(p,1);
-  }
-  aiPlacePollution(p);
-}
 function aiRecycle(p){
   const centers=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy);
   if(!centers.length) return;
@@ -2252,6 +2352,14 @@ function showTradeModal(p){
     const gq=Math.max(0,parseInt($("tr-give-qty").value)||0);
     const rq=Math.max(0,parseInt($("tr-req-qty").value)||0);
     const err=$("tr-err"); if(err) err.textContent="";
+    if(NET.online){
+      if(gq<=0 && rq<=0){ if(err) err.textContent="Indiquez une quantité à donner et/ou à demander."; return; }
+      if(gq>0 && p.res[giveK]<gq){ if(err) err.textContent=`Vous n'avez pas ${gq}${RES[giveK].ic}.`; return; }
+      trPropose(to.i, giveK, gq, reqK, rq);
+      closeModal();
+      setHint(`🤝 Proposition envoyée à <b>${to.name}</b> — en attente de sa réponse… <div class="mini"><button class="ghost" onclick="trCancel()">Annuler la proposition</button></div>`);
+      return;
+    }
     const r=doTrade(p,to,giveK,gq,reqK,rq);
     if(!r.ok){ if(err) err.textContent=r.err; return; }
     closeModal(); render();
@@ -2267,6 +2375,91 @@ function doTrade(p,to,giveK,gq,reqK,rq){
   log(`🤝 ${p.name} ${parts.join(" et ")} (avec ${to.name}).`);
   return {ok:true};
 }
+
+/* =========================================================================
+   NÉGOCIATION EN LIGNE — canal "TRADE" partagé (Playroom), les 2 parties écrivent.
+   Termes toujours exprimés du point de vue de l'INITIATEUR (from) :
+   give = ce que 'from' donne à 'to' ; req = ce que 'from' demande à 'to'.
+   ========================================================================= */
+function trSend(msg){
+  if(!window.Playroom) return;
+  msg.v=Date.now()+Math.random();
+  NET.trLastV=msg.v;   // ne pas retraiter son propre message
+  try{ window.Playroom.setState("TRADE", msg, true); }catch(e){}
+}
+function trPropose(toSeat,giveK,gq,reqK,rq){
+  NET.trCur={from:NET.seat,to:toSeat,giveK,gq,reqK,rq,status:"pending",by:NET.seat,round:1};
+  trSend(Object.assign({},NET.trCur));
+  log(`🤝 ${G.players[NET.seat].name} propose un échange à ${G.players[toSeat].name}.`);
+}
+function trCancel(){
+  if(!NET.trCur) { setHint("Aucune proposition en cours."); return; }
+  trSend({from:NET.trCur.from,to:NET.trCur.to,status:"cancelled",by:NET.seat});
+  NET.trCur=null; closeModal(); setHint("Proposition annulée.");
+}
+function trRespond(action, terms){
+  const t=NET.trCur; if(!t) return;
+  if(action==="accept"){ trSend(Object.assign({},t,{status:"accepted",by:NET.seat})); closeModal(); setHint("Vous avez accepté l'échange — application en cours…"); }
+  else if(action==="refuse"){ trSend(Object.assign({},t,{status:"refused",by:NET.seat})); NET.trCur=null; closeModal(); setHint("Échange refusé."); }
+  else if(action==="counter"){
+    const nt=Object.assign({},t,terms,{status:"counter",by:NET.seat,round:(t.round||1)+1});
+    NET.trCur=nt; trSend(Object.assign({},nt)); closeModal();
+    setHint(`↩️ Contre-proposition envoyée — en attente… <div class="mini"><button class="ghost" onclick="trCancel()">Annuler</button></div>`);
+  }
+}
+function trTermsHtml(t){
+  const me=NET.seat, iAmFrom=me===t.from;
+  const other=G.players[iAmFrom?t.to:t.from].name;
+  const iGive = iAmFrom ? {k:t.giveK,q:t.gq} : {k:t.reqK,q:t.rq};
+  const iGet  = iAmFrom ? {k:t.reqK,q:t.rq} : {k:t.giveK,q:t.gq};
+  const line=(lbl,o)=>o.q>0?`<div>${lbl} <b>${o.q}${RES[o.k].ic} ${RES[o.k].label}</b></div>`:"";
+  return `<div style="font-size:14px;line-height:1.7">${line("➡️ Vous donnez",iGive)}${line("⬅️ Vous recevez",iGet)}<div style="color:#9fc1bc;font-size:12px">avec ${other}${t.round>1?` · négociation n°${t.round}`:""}</div></div>`;
+}
+function trShowRespondModal(t){
+  NET.trCur=t;
+  const mount=$("modal-mount");
+  const seg=(id,sel)=>`<div class="seg" id="${id}">${["food","energy","raw","recy"].map(k=>`<button data-k="${k}" class="${k===sel?'on':''}">${RES[k].ic}</button>`).join("")}</div>`;
+  mount.innerHTML=`<div class="modal"><div class="sheet">
+    <h2>Proposition d'échange 🤝</h2>
+    ${trTermsHtml(t)}
+    <details style="margin:12px 0"><summary style="cursor:pointer;color:#bcd6d2;font-size:13px">↩️ Contre-proposer (modifier les termes)</summary>
+      <div class="field" style="margin-top:10px"><label style="font-size:12px;color:#bcd6d2">${G.players[t.from].name} donne</label>${seg("ct-give","food")}<input id="ct-gq" type="number" min="0" value="${t.gq}" style="width:100%;margin-top:6px;padding:10px;border-radius:10px;background:rgba(0,0,0,.2);color:#fff;border:1px solid var(--line)"></div>
+      <div class="field"><label style="font-size:12px;color:#bcd6d2">${G.players[t.from].name} demande</label>${seg("ct-req","energy")}<input id="ct-rq" type="number" min="0" value="${t.rq}" style="width:100%;margin-top:6px;padding:10px;border-radius:10px;background:rgba(0,0,0,.2);color:#fff;border:1px solid var(--line)"></div>
+      <button class="ghost" id="ct-send" style="width:100%">↩️ Envoyer la contre-proposition</button>
+    </details>
+    <div class="closebar"><button id="tr-refuse" style="background:#5a2b23;color:#ffd9d0">Refuser</button><button id="tr-accept" style="background:#fff;color:#0e2a2e">Accepter</button></div>
+  </div></div>`;
+  let gk=t.giveK, rk=t.reqK;
+  mount.querySelectorAll("#ct-give button").forEach(b=>{ b.classList.toggle("on",b.getAttribute("data-k")===t.giveK); b.onclick=()=>{ mount.querySelectorAll("#ct-give button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); gk=b.getAttribute("data-k"); }; });
+  mount.querySelectorAll("#ct-req button").forEach(b=>{ b.classList.toggle("on",b.getAttribute("data-k")===t.reqK); b.onclick=()=>{ mount.querySelectorAll("#ct-req button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); rk=b.getAttribute("data-k"); }; });
+  $("tr-accept").onclick=()=>trRespond("accept");
+  $("tr-refuse").onclick=()=>trRespond("refuse");
+  $("ct-send").onclick=()=>{
+    const gq=Math.max(0,parseInt($("ct-gq").value)||0), rq=Math.max(0,parseInt($("ct-rq").value)||0);
+    if(gq<=0&&rq<=0) return;
+    trRespond("counter",{giveK:gk,gq,reqK:rk,rq});
+  };
+}
+function trHandle(t){
+  if(!t || !G || !G.started || G.over) return;
+  const me=NET.seat; if(me==null) return;
+  if(me!==t.from && me!==t.to) { NET.trCur=null; return; }   // pas concerné
+  if(t.status==="pending" && me===t.to){ trShowRespondModal(t); }
+  else if(t.status==="counter" && me===(t.by===t.to?t.from:t.to)){ trShowRespondModal(t); }
+  else if(t.status==="accepted"){
+    NET.trCur=null;
+    if(me===t.from){   // l'initiateur exécute et diffuse
+      const r=doTrade(G.players[t.from],G.players[t.to],t.giveK,t.gq,t.reqK,t.rq);
+      if(r.ok){ trSend({from:t.from,to:t.to,status:"done"}); closeModal(); render(); setHint("🤝 Échange conclu !"); }
+      else { trSend({from:t.from,to:t.to,status:"failed",err:r.err}); closeModal(); render(); setHint("⚠️ Échange impossible : "+r.err); }
+    }
+  }
+  else if(t.status==="done"){ NET.trCur=null; if(me===t.to){ closeModal(); setHint("🤝 Échange conclu !"); } }
+  else if(t.status==="failed"){ NET.trCur=null; closeModal(); setHint("⚠️ Échange impossible : "+(t.err||"")); }
+  else if(t.status==="refused"){ NET.trCur=null; if(me===t.from){ closeModal(); setHint("❌ Votre proposition a été refusée."); } }
+  else if(t.status==="cancelled"){ NET.trCur=null; if(me===t.to){ closeModal(); setHint("La proposition d'échange a été annulée."); } }
+}
+window.trCancel=trCancel;
 
 /* =========================================================================
    FIN DE PARTIE
@@ -2653,7 +2846,7 @@ window.addEventListener("resize",resizeHome);
 
 /* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
 /* Version de l'application — incrémenter à chaque nouvelle build. */
-const APP_VERSION = "V3.7";
+const APP_VERSION = "V3.9";
 if($("app-version")) $("app-version").textContent = APP_VERSION;
 if($("game-version")) $("game-version").textContent = APP_VERSION;
 
@@ -2687,7 +2880,7 @@ window.cancelRecycle=cancelRecycle;
    puis collez ici son identifiant. Laissé vide = mode développement Playroom. */
 const PLAYROOM_GAME_ID = "ngD0JunWQlaOiXezq15U";
 
-var NET = { online:false, seat:null, myId:null, players:[], applyingRemote:false, endShown:false, pollTimer:null };
+var NET = { online:false, seat:null, myId:null, players:[], applyingRemote:false, endShown:false, pollTimer:null, trLastV:0, trCur:null };
 
 function showGameScreen(){ ["setup","local","online","end"].forEach(id=>$(id).classList.add("hidden")); $("game").classList.remove("hidden"); }
 function showLobbyScreen(){ ["setup","local","game","end"].forEach(id=>$(id).classList.add("hidden")); $("online").classList.remove("hidden"); }
@@ -2715,9 +2908,13 @@ function netPush(){
 function netPoll(){
   if(!NET.online || !window.Playroom) return;
   let remote; try{ remote=window.Playroom.getState("G"); }catch(e){ return; }
-  if(!remote) return;
-  const rv=remote.__v||0, lv=(G&&G.__v)||-1;
-  if(rv>lv) netApply(remote);
+  if(remote){
+    const rv=remote.__v||0, lv=(G&&G.__v)||-1;
+    if(rv>lv) netApply(remote);
+  }
+  // canal de négociation commerciale
+  let tr; try{ tr=window.Playroom.getState("TRADE"); }catch(e){ tr=null; }
+  if(tr && tr.v && tr.v!==NET.trLastV){ NET.trLastV=tr.v; trHandle(tr); }
 }
 function netApply(remote){
   NET.applyingRemote=true;
