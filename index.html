@@ -241,6 +241,15 @@ svg.gulf{width:100%;max-width:360px;height:auto}
 .choice .cost.ko{color:var(--bad)}
 .sheet .closebar{display:flex;gap:8px;margin-top:14px}
 .sheet .closebar button{flex:1;padding:12px;border-radius:12px;font-weight:700;background:rgba(255,255,255,.1);border:1px solid var(--line);color:#fff}
+.trrow{display:flex;gap:8px}
+.trres{position:relative;flex:1;padding:14px 6px 10px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:#fff;font-size:20px}
+.trres.on{background:#fff;color:var(--ink);border-color:#fff}
+.trres .cnt{position:absolute;top:3px;left:5px;font-size:11px;font-weight:800;color:#7fe0b0}
+.trres.on .cnt{color:#0e7a4f}
+.stepper{display:flex;align-items:center;gap:10px;margin-top:8px}
+.stepper button{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.12);border:1px solid var(--line);color:#fff;font-size:22px;font-weight:800;line-height:1}
+.stepper .stval{min-width:44px;text-align:center;font-size:22px;font-weight:900}
+.stepper small{color:#9fc1bc}
 
 /* end screen */
 #end{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -454,13 +463,18 @@ svg.gulf{width:100%;max-width:360px;height:auto}
     <div id="lobby-connecting" style="text-align:center;color:#bcd6d2;padding:20px">Connexion au salon…</div>
 
     <div id="lobby-main" class="hidden">
-      <div class="field" style="text-align:center">
+      <div class="field" style="text-align:center" id="host-share">
         <label>Code de la partie</label>
         <div id="room-code" style="font-size:30px;font-weight:900;letter-spacing:4px;color:#fff">——</div>
         <img id="room-qr" alt="QR code pour rejoindre" style="width:200px;height:200px;border-radius:14px;margin:12px auto 4px;display:block;background:#fff;padding:8px">
         <div style="font-size:12px;color:#bcd6d2">Les autres joueurs scannent ce QR code, ou ouvrent le lien :</div>
         <div id="room-link" style="font-size:11px;color:#9fc1bc;word-break:break-all;margin-top:4px"></div>
         <button id="btn-copy" style="margin-top:8px;padding:8px 14px;border-radius:10px;background:rgba(255,255,255,.1);color:#fff;border:1px solid var(--line);cursor:pointer">Copier le lien</button>
+      </div>
+
+      <div class="field">
+        <label>Votre pseudo</label>
+        <input id="lob-name" type="text" maxlength="16" placeholder="Nom affiché dans la partie" style="width:100%;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--paper)">
       </div>
 
       <div class="field">
@@ -1176,7 +1190,6 @@ function buildOnPawn(p,key,type){
 function openUpgradeMenu(p,key){
   const c=p.board[key];
   const type=c.type;
-  if(c.lvl>=3){ setHint(B[type].name+" est déjà au niveau maximum."); return; }
   const items=[];
   for(let target=c.lvl+1; target<=3; target++){
     // coût cumulé du niveau c.lvl+1 .. target
@@ -1196,7 +1209,21 @@ function openUpgradeMenu(p,key){
       onPick:()=>{ upgradeTo(p,key,target); }
     });
   }
-  showChoiceModal({title:"Améliorer "+B[type].name,sub:"Payez le coût cumulé du niveau visé.",items});
+  items.push({
+    ic:"🗑️", color:"#7a2f2f",
+    title:"Détruire ce bâtiment",
+    sub:"Libère la case et rend 1 pion construction (aucune ressource rendue)",
+    cost:"", ok:true,
+    onPick:()=>{ destroyBuilding(p,key); }
+  });
+  const sub = c.lvl>=3 ? B[type].name+" est au niveau maximum — vous pouvez le détruire." : "Payez le coût cumulé du niveau visé, ou détruisez le bâtiment.";
+  showChoiceModal({title:B[type].name+" (Niv."+c.lvl+")",sub,items});
+}
+function destroyBuilding(p,key){
+  const c=p.board[key]; if(!c||c.kind!=="building") return;
+  log("🗑️ "+p.name+" détruit "+B[c.type].name+" Niv."+c.lvl+" (récupère 1 pion construction).");
+  p.board[key]={kind:"pawn"};
+  closeModal(); render(); buildHint(p);
 }
 function upgradeTo(p,key,target){
   const c=p.board[key], type=c.type, from=c.lvl;
@@ -1301,116 +1328,50 @@ function startRecycle(){
   const centers=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy);
   if(!centers.length){ setHint("Aucun centre de recyclage disponible."); return; }
   G.phase={active:"recycle", poll:0, acted:false};
-  setPending({mode:"recycleSelect"});
-  setHint("<b>Recyclage.</b> Touchez un <b>centre de recyclage</b> (clignotant) à activer. Rappel : on ne recycle pas une pollution produite ce tour-ci."+finishBtn("Terminer le recyclage"));
-}
-function selectRecycleCenter(p,key){
-  const c=p.board[key];
-  const cap=B.recyclage.recyCap[c.lvl];
-  G.pending={mode:"recycleRun", center:key, cap, picked:[], gulfPicked:0, removedGulf:[], removedBoard:[]};
-  render();
-  setHint(`<b>Recyclage (Niv.${c.lvl}, capacité ${cap}).</b> Touchez la pollution à recycler : votre Gulf Stream (rapporte des ♻️) ou la pollution <b>adjacente</b> au centre. Validez ensuite.`);
-}
-function recycleGulfToken(slotIdx){
-  const p=cur(), pe=G.pending;
-  if(!pe||pe.mode!=="recycleRun") return;
-  if(pe.picked.length>=pe.cap){ setHint("Capacité atteinte."); return; }
-  if(!isMyGulfSlot(p,slotIdx)){ setHint("Vous ne pouvez recycler que votre portion du Gulf Stream."); return; }
-  const slot=G.gulf[slotIdx];
-  if(!slot.tokens.length){ return; }
-  // on recycle le jeton le plus ancien ; interdit si produit ce tour-ci
-  if(slot.tokens[0].turn===G.turnId){ setHint("Impossible de recycler une pollution produite ce tour-ci."); return; }
-  const tok=slot.tokens.shift();
-  pe.removedGulf.push({idx:slotIdx, tok});
-  pe.picked.push({src:"gulf"}); pe.gulfPicked++;
-  render(); updateRecycleHint();
-}
-function recycleBoardToken(key){
-  const p=cur(), pe=G.pending;
-  if(!pe||pe.mode!=="recycleRun") return;
-  if(pe.picked.length>=pe.cap){ setHint("Capacité atteinte."); return; }
-  const [cq,cr]=pe.center.split(",").map(Number);
-  if(!neighborsKeys(cq,cr).includes(key)){ setHint("Cette pollution n'est pas adjacente au centre."); return; }
-  if(p.board[key].kind!=="pollution") return;
-  if(p.board[key].turn===G.turnId){ setHint("Impossible de recycler une pollution produite ce tour-ci."); return; }
-  pe.removedBoard.push({key, lvl:p.board[key].lvl, turn:p.board[key].turn});
-  p.board[key]={kind:"empty"};
-  pe.picked.push({src:"board"});
-  render(); updateRecycleHint();
+  const capLeft={}; centers.forEach(([k,c])=>capLeft[k]=B.recyclage.recyCap[c.lvl]);
+  G.pending={mode:"recycle", capLeft, granted:{}, gulfPts:0, total:0};
+  render(); recycleHint();
 }
 function isMyGulfSlot(p,idx){
   for(let k=0;k<3;k++){ if((p.gulfStart+k)%G.gulf.length===idx) return true; }
   return false;
 }
-function updateRecycleHint(){
-  const pe=G.pending;
-  setHint(`Sélectionné : ${pe.picked.length}/${pe.cap} (dont ${pe.gulfPicked} du Gulf Stream → ♻️).` +
-    `<div class="mini"><button onclick="confirmRecycle()">Valider le recyclage</button>` +
-    `<button class="ghost" onclick="cancelRecycle()">Annuler</button></div>`);
+function recycleCapTotal(pe){ return Object.values(pe.capLeft).reduce((a,b)=>a+b,0); }
+function recycleHint(){
+  const pe=G.pending; if(!pe||pe.mode!=="recycle") return;
+  const cap=recycleCapTotal(pe);
+  setHint(`<b>Recyclage.</b> Cliquez directement sur les pollutions à retirer : votre <b>Gulf Stream</b> (rapporte des ♻️) ou une pollution <b>adjacente à un centre</b>. `+
+    `Recyclé : <b>${pe.total}</b> (dont ${pe.gulfPts} du golfe → +${pe.gulfPts}♻️) · capacité restante <b>${cap}</b>.`+
+    finishBtn("Terminer le recyclage"));
 }
-function cancelRecycle(){
-  const pe=G.pending; const p=cur();
-  if(pe&&pe.mode==="recycleRun"){
-    pe.removedGulf.forEach(g=>{ if(G.gulf[g.idx].tokens.length<3) G.gulf[g.idx].tokens.unshift(g.tok); });
-    pe.removedBoard.forEach(b=>{ if(p.board[b.key].kind==="empty") p.board[b.key]={kind:"pollution",lvl:b.lvl,turn:b.turn}; });
-  }
-  if(G.phase && G.phase.active==="recycle"){
-    setPending({mode:"recycleSelect"});
-    setHint("Sélection annulée. Touchez un centre de recyclage, ou terminez la phase."+finishBtn("Terminer le recyclage"));
-  }else{
-    clearPending(); setHint("Recyclage annulé.");
-  }
-}
-function confirmRecycle(){
-  const p=cur(), pe=G.pending;
-  if(!pe||pe.mode!=="recycleRun") return;
-  if(pe.picked.length===0){ setHint("Sélectionnez au moins une pollution, ou annulez."+
-    `<div class="mini"><button class="ghost" onclick="cancelRecycle()">Annuler</button></div>`); return; }
-  const c=p.board[pe.center];
-  c.usedRecy=true;
-  const pts=pe.gulfPicked;
-  p.res.recy+=pts;
-  const gain=B.recyclage.gainRes[c.lvl];
-  if(gain>0){
-    G.pending=null;
-    askResourceGain(p,gain,pts,pe.picked.length);
-    return;
-  }
-  log(`♻️ ${p.name} recycle ${pe.picked.length} pollution(s) (+${pts}♻️).`);
-  G.pending=null; afterRecycleDone(p);
-}
-function afterRecycleDone(p){
+function anyCenterCap(pe){ return Object.keys(pe.capLeft).find(k=>pe.capLeft[k]>0); }
+function consumeRecycleCap(p,pe,ck){
+  pe.capLeft[ck]--;
+  if(!pe.granted[ck]){ pe.granted[ck]=true; const g=B.recyclage.gainRes[p.board[ck].lvl]||0; for(let i=0;i<g;i++) p.res.energy++; if(g) log(`♻️ Centre Niv.${p.board[ck].lvl} : +${g}⚡.`); }
+  if(pe.capLeft[ck]<=0) p.board[ck].usedRecy=true;
   G.phase.acted=true;
-  const left=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy);
-  if(left.length){
-    setPending({mode:"recycleSelect"});
-    setHint("Recyclage effectué. Touchez un autre centre de recyclage, ou terminez la phase."+finishBtn("Terminer le recyclage"));
-  }else{
-    markPhaseDone();
-  }
 }
-function askResourceGain(p,gain,pts,total){
-  // choisir gain énergie/MP, "gain" fois
-  let remaining=gain, chosen=[];
-  function step(){
-    if(remaining<=0){
-      chosen.forEach(r=>p.res[r]++);
-      log(`♻️ ${p.name} recycle ${total} pollution(s) (+${pts}♻️, +${chosen.map(r=>RES[r].ic).join("")}).`);
-      closeModal(); afterRecycleDone(p);
-      return;
-    }
-    showChoiceModal({
-      title:"Ressource récupérée",
-      sub:`Centre de recyclage : choisissez une ressource (${gain-remaining+1}/${gain}).`,
-      items:[
-        {ic:"⚡",color:"#e8b13a",title:"Énergie",sub:"+1 énergie",cost:"",ok:true,onPick:()=>{chosen.push("energy");remaining--;step();}},
-        {ic:"🪵",color:"#8a6d4b",title:"Matière première",sub:"+1 MP",cost:"",ok:true,onPick:()=>{chosen.push("raw");remaining--;step();}},
-      ],
-      noCancel:true,
-    });
-  }
-  step();
+function recycleGulfToken(idx){
+  const p=cur(), pe=G.pending; if(!pe||pe.mode!=="recycle") return;
+  if(!isMyGulfSlot(p,idx)){ setHint("Recyclez uniquement votre portion (encadrée) du Gulf Stream."); return; }
+  const slot=G.gulf[idx]; if(!slot.tokens.length) return;
+  if(slot.tokens[0].turn===G.turnId){ setHint("Impossible de recycler une pollution produite ce tour-ci."); return; }
+  const ck=anyCenterCap(pe); if(!ck){ setHint("Capacité de recyclage épuisée pour ce tour."); return; }
+  slot.tokens.shift(); consumeRecycleCap(p,pe,ck); p.res.recy++; pe.gulfPts++; pe.total++;
+  log(`♻️ ${p.name} recycle 1 pollution du Gulf Stream (+1♻️).`);
+  render(); recycleHint();
 }
+function recycleBoardToken(key){
+  const p=cur(), pe=G.pending; if(!pe||pe.mode!=="recycle") return;
+  if(!p.board[key]||p.board[key].kind!=="pollution") return;
+  if(p.board[key].turn===G.turnId){ setHint("Impossible de recycler une pollution produite ce tour-ci."); return; }
+  const ck=Object.keys(pe.capLeft).find(k=>{ if(pe.capLeft[k]<=0) return false; const [cq,cr]=k.split(",").map(Number); return neighborsKeys(cq,cr).includes(key); });
+  if(!ck){ setHint("Aucun centre adjacent disponible n'a de capacité pour cette pollution."); return; }
+  p.board[key]={kind:"empty"}; consumeRecycleCap(p,pe,ck); pe.total++;
+  log(`♻️ ${p.name} recycle 1 pollution de son plateau.`);
+  render(); recycleHint();
+}
+window.recycleHint=recycleHint;
 
 /* ---- ÉCHANGE (accord commercial) ---- */
 function startTrade(){
@@ -1980,7 +1941,7 @@ function syncBoard3D(p){
   });
 }
 function countPawns(p){return Object.values(p.board).filter(c=>c.kind==="pawn").length + p.reservePawns;}
-function phaseLabel(m){return {produce:"Production",build:"Construction",recycleSelect:"Recyclage",recycleRun:"Recyclage",placePollution:"Placer la pollution"}[m]||"";}
+function phaseLabel(m){return {produce:"Production",build:"Construction",recycle:"Recyclage",recycleSelect:"Recyclage",recycleRun:"Recyclage",placePollution:"Placer la pollution"}[m]||"";}
 
 function renderBoard(p){
   const svg=$("board");
@@ -1997,15 +1958,21 @@ function renderBoard(p){
   const eligPawn = (pe&&pe.mode==="placePawns")? new Set(eligiblePawnCells(p)) : new Set();
   let eligAct = new Set();
   if(pe&&pe.mode==="build"){
-    Object.entries(p.board).forEach(([k,c])=>{ if(c.kind==="pawn"||(c.kind==="building"&&c.lvl<3)) eligAct.add(k); });
+    Object.entries(p.board).forEach(([k,c])=>{ if(c.kind==="pawn"||c.kind==="building") eligAct.add(k); });
   }else if(pe&&pe.mode==="produce"){
     Object.entries(p.board).forEach(([k,c])=>{ if(c.kind==="building"&&B[c.type].produces&&!c.usedProd) eligAct.add(k); });
   }
-  const recRun = (pe&&pe.mode==="recycleRun")? pe : null;
-  let recBoardElig=new Set();
-  if(recRun){ const [cq,cr]=recRun.center.split(",").map(Number);
-    recBoardElig=new Set(neighborsKeys(cq,cr).filter(k=>p.board[k].kind==="pollution" && p.board[k].turn!==G.turnId)); }
-  const recSelect = (pe&&pe.mode==="recycleSelect");
+  const rec = (pe&&pe.mode==="recycle")? pe : null;
+  let recBoardElig=new Set(), recCenterAvail=new Set();
+  if(rec){
+    Object.keys(rec.capLeft).forEach(k=>{
+      if(rec.capLeft[k]>0){
+        recCenterAvail.add(k);
+        const [cq,cr]=k.split(",").map(Number);
+        neighborsKeys(cq,cr).forEach(nk=>{ if(p.board[nk]&&p.board[nk].kind==="pollution"&&p.board[nk].turn!==G.turnId) recBoardElig.add(nk); });
+      }
+    });
+  }
 
   let html="";
   CELLS.forEach(cell=>{
@@ -2022,6 +1989,13 @@ function renderBoard(p){
       extra=`<text class="cellico" x="${x}" y="${y-4}">${def.ic}</text>`+
             `<g class="lvlbadge"><circle cx="${x+18}" cy="${y+18}" r="11" fill="#0e2a2e"/><text x="${x+18}" y="${y+18}" class="cellico" style="font-size:13px;font-weight:800;fill:#fff">${c.lvl}</text></g>`;
       if(c.type==="centrale") extra=`<text class="cellico" x="${x}" y="${y-4}" style="fill:#1d2b2e">${def.ic}</text>`+extra.split("</text>").slice(1).join("</text>");
+      // ✓ bâtiment déjà utilisé ce tour (production ou recyclage)
+      if(used) extra+=`<g class="pollchip"><circle cx="${x-17}" cy="${y+17}" r="10" fill="#2f8f4f"/><text x="${x-17}" y="${y+17}" class="cellico" style="font-size:13px;font-weight:900;fill:#fff">✓</text></g>`;
+      // pendant le recyclage : capacité restante du centre encore disponible
+      if(rec && c.type==="recyclage" && recCenterAvail.has(cell.key)){
+        cls+=" cell-elig";
+        extra+=`<g class="pollchip"><circle cx="${x-17}" cy="${y+17}" r="10" fill="#3a48a6"/><text x="${x-17}" y="${y+17}" class="cellico" style="font-size:11px;font-weight:900;fill:#fff">${rec.capLeft[cell.key]}</text></g>`;
+      }
       // badge effet météo en cours sur ce type de bâtiment
       const wm=G.weather&&G.weather.mod&&G.weather.mod[c.type];
       if(wm){
@@ -2042,7 +2016,6 @@ function renderBoard(p){
     if(eligPawn.has(cell.key)) cls+=" cell-elig";
     if(eligPoll.has(cell.key)) cls+=" cell-elig";
     if(recBoardElig.has(cell.key)) cls+=" cell-recyc-src";
-    if(recSelect && c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy) cls+=" cell-elig";
     if(coastKeys.has(cell.key)) cls+= connKeys.has(cell.key)? " cell-coast-conn":" cell-coast";
 
     html+=`<polygon class="${cls}" ${fill} points="${hexPoints(x,y,HEX_SIZE*0.92)}" data-key="${cell.key}"></polygon>${extra}`;
@@ -2056,7 +2029,9 @@ function renderBoard(p){
 }
 function pollutionGlyph(x,y,lvl){
   const col=lvl===1?"#d9d2c4":lvl===2?"#b7ad97":"#8f8567";
-  return `<g class="pollchip"><circle cx="${x}" cy="${y}" r="15" fill="${col}" stroke="#5b5340" stroke-width="2"/><text x="${x}" y="${y}" class="cellico" style="font-size:14px;font-weight:800;fill:#3a3320">${lvl}</text></g>`;
+  return `<g class="pollchip"><circle cx="${x}" cy="${y}" r="16" fill="${col}" stroke="#5b5340" stroke-width="2"/>`+
+    `<text x="${x}" y="${y-2}" class="cellico" style="font-size:16px">☣️</text>`+
+    `<g><circle cx="${x+12}" cy="${y+12}" r="8.5" fill="#3a3320"/><text x="${x+12}" y="${y+12}" class="cellico" style="font-size:11px;font-weight:800;fill:#fff">${lvl}</text></g></g>`;
 }
 
 function gulfCrescent(cx,cy,inner,outer,aSdeg,aEdeg,fill,op){
@@ -2079,7 +2054,7 @@ function renderGulf(p){
   const A=(i)=> Adeg(i)*Math.PI/180;
   const pe=G.pending;
   const placing=(pe&&pe.mode==="placePollution");
-  const recRun=(pe&&pe.mode==="recycleRun")?pe:null;
+  const recRun=(pe&&pe.mode==="recycle")?pe:null;
   let html="";
   // anneau du courant
   html+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="${2*r+6}"/>`;
@@ -2246,11 +2221,9 @@ function onBoardClick(key){
     else setHint("Touchez une ferme, usine ou centrale non encore utilisée.");
   }else if(pe.mode==="placePollution"){
     placePollutionOnBoard(p,key);
-  }else if(pe.mode==="recycleSelect"){
-    if(c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy) selectRecycleCenter(p,key);
-    else setHint("Touchez un centre de recyclage disponible.");
-  }else if(pe.mode==="recycleRun"){
+  }else if(pe.mode==="recycle"){
     if(c.kind==="pollution") recycleBoardToken(key);
+    else setHint("Cliquez sur une pollution à recycler (Gulf Stream, ou plateau adjacent à un centre).");
   }
 }
 function onGulfClick(idx){
@@ -2260,7 +2233,7 @@ function onGulfClick(idx){
   if(pe.mode==="placePollution"){
     if(!isMyGulfSlot(p,idx)){ setHint("Placez la pollution sur VOTRE portion (encadrée)."); return; }
     placePollutionOnGulf(idx);
-  }else if(pe.mode==="recycleRun"){
+  }else if(pe.mode==="recycle"){
     recycleGulfToken(idx);
   }
 }
@@ -2325,45 +2298,59 @@ function closeModal(){ $("modal-mount").innerHTML=""; }
 function showTradeModal(p){
   const others=G.players.filter(q=>q!==p);
   const mount=$("modal-mount");
-  const seg=(id,sel)=>`<div class="seg" id="${id}">${["food","energy","raw","recy"].map((k,i)=>`<button data-k="${k}" class="${k===sel?'on':''}">${RES[k].ic}</button>`).join("")}</div>`;
-  const qinput=(id)=>`<input id="${id}" type="number" min="0" value="0" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,.2);color:#fff;border:1px solid var(--line)">`;
-  mount.innerHTML=`<div class="modal"><div class="sheet">
-    <h2>Échange 🤝</h2>
-    <p class="sub">En local, l'échange s'exécute immédiatement (les joueurs s'accordent autour de la table). Vous pouvez <b>donner</b> et/ou <b>demander</b> des ressources.</p>
-    <div class="field"><label style="font-size:12px;color:#bcd6d2">Avec</label>
-      <select id="tr-to" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,.2);color:#fff;border:1px solid var(--line)">
-        ${others.map(q=>`<option value="${q.i}">${q.name}</option>`).join("")}
-      </select></div>
-    <div class="field"><label style="font-size:12px;color:#bcd6d2">➡️ Vous donnez</label>
-      ${seg("tr-give-res","food")}
-      <div style="margin-top:6px">${qinput("tr-give-qty")}</div></div>
-    <div class="field"><label style="font-size:12px;color:#bcd6d2">⬅️ Vous demandez</label>
-      ${seg("tr-req-res","energy")}
-      <div style="margin-top:6px">${qinput("tr-req-qty")}</div></div>
-    <div id="tr-err" style="color:#e0573f;font-size:13px;min-height:16px"></div>
-    <div class="closebar"><button id="tr-cancel">Fermer</button><button id="tr-do" style="background:#fff;color:#0e2a2e">Échanger</button></div>
-  </div></div>`;
-  let giveK="food", reqK="energy";
-  mount.querySelectorAll("#tr-give-res button").forEach(b=>b.onclick=()=>{ mount.querySelectorAll("#tr-give-res button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); giveK=b.getAttribute("data-k"); });
-  mount.querySelectorAll("#tr-req-res button").forEach(b=>b.onclick=()=>{ mount.querySelectorAll("#tr-req-res button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); reqK=b.getAttribute("data-k"); });
-  $("tr-cancel").onclick=closeModal;
-  $("tr-do").onclick=()=>{
-    const to=G.players[+$("tr-to").value];
-    const gq=Math.max(0,parseInt($("tr-give-qty").value)||0);
-    const rq=Math.max(0,parseInt($("tr-req-qty").value)||0);
-    const err=$("tr-err"); if(err) err.textContent="";
+  let toIdx=others[0].i, giveK="food", reqK="energy", gq=0, rq=0;
+  const partner=()=>G.players[toIdx];
+  function resBtns(side){
+    const who=side==="give"?p:partner(), selK=side==="give"?giveK:reqK;
+    return ["food","energy","raw","recy"].map(k=>
+      `<button class="trres ${k===selK?'on':''}" data-side="${side}" data-k="${k}"><span class="cnt">${who.res[k]}</span>${RES[k].ic}</button>`).join("");
+  }
+  function draw(){
+    mount.innerHTML=`<div class="modal"><div class="sheet">
+      <h2>Échange 🤝</h2>
+      <p class="sub">${NET.online?"Proposez un échange : l'autre joueur pourra accepter, refuser ou renégocier.":"En local, l'échange s'exécute immédiatement."} Le petit chiffre en haut à gauche de chaque ressource = quantité disponible.</p>
+      <div class="field"><label style="font-size:12px;color:#bcd6d2">Avec</label>
+        <select id="tr-to" style="width:100%;padding:10px;border-radius:10px;background:rgba(0,0,0,.2);color:#fff;border:1px solid var(--line)">
+          ${others.map(q=>`<option value="${q.i}" ${q.i===toIdx?'selected':''}>${q.name}</option>`).join("")}
+        </select></div>
+      <div class="field"><label style="font-size:12px;color:#bcd6d2">➡️ Vous donnez <span style="color:#9fc1bc">(vos ressources)</span></label>
+        <div class="trrow">${resBtns("give")}</div>
+        <div class="stepper"><button data-act="g-">−</button><span class="stval" id="tr-gq">${gq}</span><button data-act="g+">+</button><small>max ${p.res[giveK]}</small></div></div>
+      <div class="field"><label style="font-size:12px;color:#bcd6d2">⬅️ Vous demandez <span style="color:#9fc1bc">(ressources de ${partner().name})</span></label>
+        <div class="trrow">${resBtns("req")}</div>
+        <div class="stepper"><button data-act="r-">−</button><span class="stval" id="tr-rq">${rq}</span><button data-act="r+">+</button><small>max ${partner().res[reqK]}</small></div></div>
+      <div id="tr-err" style="color:#e0573f;font-size:13px;min-height:16px"></div>
+      <div class="closebar"><button id="tr-cancel">Fermer</button><button id="tr-do" style="background:#fff;color:#0e2a2e">${NET.online?"Proposer":"Échanger"}</button></div>
+    </div></div>`;
+    $("tr-to").onchange=()=>{ toIdx=+$("tr-to").value; rq=Math.min(rq,partner().res[reqK]); draw(); };
+    mount.querySelectorAll(".trres").forEach(b=>b.onclick=()=>{
+      const side=b.getAttribute("data-side"), k=b.getAttribute("data-k");
+      if(side==="give"){ giveK=k; gq=Math.min(gq,p.res[k]); } else { reqK=k; rq=Math.min(rq,partner().res[k]); }
+      draw();
+    });
+    mount.querySelectorAll(".stepper button").forEach(b=>b.onclick=()=>{
+      const a=b.getAttribute("data-act");
+      if(a==="g+") gq=Math.min(p.res[giveK],gq+1); else if(a==="g-") gq=Math.max(0,gq-1);
+      else if(a==="r+") rq=Math.min(partner().res[reqK],rq+1); else if(a==="r-") rq=Math.max(0,rq-1);
+      $("tr-gq").textContent=gq; $("tr-rq").textContent=rq;
+    });
+    $("tr-cancel").onclick=closeModal;
+    $("tr-do").onclick=submit;
+  }
+  function submit(){
+    const to=partner(), err=$("tr-err"); if(err) err.textContent="";
+    if(gq<=0 && rq<=0){ if(err) err.textContent="Indiquez une quantité à donner et/ou à demander."; return; }
     if(NET.online){
-      if(gq<=0 && rq<=0){ if(err) err.textContent="Indiquez une quantité à donner et/ou à demander."; return; }
-      if(gq>0 && p.res[giveK]<gq){ if(err) err.textContent=`Vous n'avez pas ${gq}${RES[giveK].ic}.`; return; }
-      trPropose(to.i, giveK, gq, reqK, rq);
-      closeModal();
+      if(gq>0 && p.res[giveK]<gq){ if(err) err.textContent="Ressources insuffisantes."; return; }
+      trPropose(to.i,giveK,gq,reqK,rq); closeModal();
       setHint(`🤝 Proposition envoyée à <b>${to.name}</b> — en attente de sa réponse… <div class="mini"><button class="ghost" onclick="trCancel()">Annuler la proposition</button></div>`);
       return;
     }
     const r=doTrade(p,to,giveK,gq,reqK,rq);
     if(!r.ok){ if(err) err.textContent=r.err; return; }
     closeModal(); render();
-  };
+  }
+  draw();
 }
 function doTrade(p,to,giveK,gq,reqK,rq){
   if(gq<=0 && rq<=0) return {ok:false,err:"Indiquez une quantité à donner et/ou à demander."};
@@ -2846,7 +2833,7 @@ window.addEventListener("resize",resizeHome);
 
 /* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
 /* Version de l'application — incrémenter à chaque nouvelle build. */
-const APP_VERSION = "V3.9";
+const APP_VERSION = "V4.0";
 if($("app-version")) $("app-version").textContent = APP_VERSION;
 if($("game-version")) $("game-version").textContent = APP_VERSION;
 
@@ -2866,9 +2853,7 @@ $("act-end").onclick=()=>{ if(G.phase&&G.phase.active){ setHint("Terminez d'abor
 window.finishPhase=finishPhase;
 window.pickBuildType=pickBuildType;
 
-// expose pour les boutons inline du hint
-window.confirmRecycle=confirmRecycle;
-window.cancelRecycle=cancelRecycle;
+// (recyclage : flux direct, plus de validation par jeton)
 
 /* =========================================================================
    COUCHE RÉSEAU — Playroom Kit (lobby + QR + synchro tour par tour)
@@ -2946,7 +2931,7 @@ function renderLobbyPlayers(){
   $("lobby-count").textContent=NET.players.length;
   $("lobby-players").innerHTML=NET.players.map((pl,i)=>{
     const col=PCOLORS[i]||"#888";
-    return `<div class="opill"><span class="d" style="background:${col}"></span>${profName(pl,i)}${pl.id===NET.myId?' (vous)':''}</div>`;
+    return `<div class="opill"><span class="d" style="background:${col}"></span>${playerNick(pl,i)}${pl.id===NET.myId?' (vous)':''}</div>`;
   }).join("");
   if(window.Playroom.isHost()){
     const enough=NET.players.length>=2;
@@ -2965,11 +2950,22 @@ function netOnConnected(){
   $("lobby-connecting").classList.add("hidden");
   $("lobby-main").classList.remove("hidden");
   setupLobbyUI();
-  if(window.Playroom.isHost()){ $("host-controls").classList.remove("hidden"); $("guest-wait").classList.add("hidden"); $("lobby-role").textContent="Vous êtes l'hôte de la partie."; }
+  const host=window.Playroom.isHost();
+  if(host){ $("host-controls").classList.remove("hidden"); $("guest-wait").classList.add("hidden"); $("lobby-role").textContent="Vous êtes l'hôte de la partie."; }
   else { $("host-controls").classList.add("hidden"); $("guest-wait").classList.remove("hidden"); $("lobby-role").textContent="Vous avez rejoint la partie."; }
+  // le QR/lien de partage n'est utile qu'à l'hôte (les invités ont déjà rejoint)
+  if($("host-share")) $("host-share").style.display = host ? "" : "none";
+  // pseudo : préremplir avec le profil, publier à chaque saisie
+  const nameEl=$("lob-name");
+  if(nameEl){
+    try{ const pr=window.Playroom.myPlayer().getProfile?window.Playroom.myPlayer().getProfile():{}; nameEl.value=(pr.name||"").slice(0,16); }catch(e){}
+    const publish=()=>{ try{ window.Playroom.myPlayer().setState("nick", (nameEl.value||"").slice(0,16), true); }catch(e){} renderLobbyPlayers(); };
+    nameEl.oninput=publish; publish();
+  }
   window.Playroom.onPlayerJoin(handlePlayerJoin);
   startPolling();
 }
+function playerNick(pl,i){ try{ const n=pl.getState&&pl.getState("nick"); if(n) return String(n).slice(0,16); }catch(e){} return profName(pl,i); }
 
 /* ---- boutons ---- */
 $("btn-online").onclick=async ()=>{
@@ -2997,7 +2993,7 @@ $("btn-online").onclick=async ()=>{
 $("btn-launch").onclick=()=>{
   if(NET.players.length<2) return;
   const list=NET.players.slice();
-  const names=list.map((pl,i)=>profName(pl,i));
+  const names=list.map((pl,i)=>playerNick(pl,i));
   const seats={}, playerIds=[];
   list.forEach((pl,i)=>{ seats[pl.id]=i; playerIds.push(pl.id); });
   NET.seat=seats[NET.myId];
