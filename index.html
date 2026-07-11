@@ -250,6 +250,11 @@ svg.gulf{width:100%;max-width:360px;height:auto}
 .stepper button{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.12);border:1px solid var(--line);color:#fff;font-size:22px;font-weight:800;line-height:1}
 .stepper .stval{min-width:44px;text-align:center;font-size:22px;font-weight:900}
 .stepper small{color:#9fc1bc}
+.stdot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:4px;flex:none}
+.stdot.on{background:#37d67a;box-shadow:0 0 6px rgba(55,214,122,.7)}
+.stdot.off{background:#7d8a8a}
+#reconnect-toast{position:fixed;left:50%;top:14px;transform:translateX(-50%) translateY(-120%);z-index:300;max-width:92vw;background:linear-gradient(180deg,#125b4e,#0d3f38);color:#eafff6;border:1px solid rgba(127,224,176,.4);border-radius:12px;padding:12px 16px;font-size:13px;font-weight:600;box-shadow:0 12px 30px rgba(0,0,0,.4);transition:transform .4s ease;text-align:center}
+#reconnect-toast.show{transform:translateX(-50%) translateY(0)}
 
 /* end screen */
 #end{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -500,6 +505,10 @@ svg.gulf{width:100%;max-width:360px;height:auto}
             <label class="switch"><input type="checkbox" id="lob-cat"><span></span></label>
           </div>
         </div>
+        <div class="field">
+          <label>Joueurs IA</label>
+          <div class="stepper"><button id="ai-minus">−</button><span class="stval" id="ai-count">0</span><button id="ai-plus">+</button><small>pilotées par l'hôte</small></div>
+        </div>
         <button class="start" id="btn-launch">Démarrer la partie</button>
         <div class="hint" id="lobby-hint" style="margin-top:10px">Il faut au moins 2 joueurs connectés.</div>
       </div>
@@ -514,6 +523,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
 
 <!-- ================= GAME ================= -->
 <section id="game" class="hidden">
+  <div id="reconnect-toast"></div>
   <div id="pview-overlay">
     <div class="pview-card">
       <div class="pview-head"><b id="pview-name"></b><button class="tips-toggle" onclick="closePlayerView()">✕ Fermer</button></div>
@@ -855,6 +865,8 @@ function initGame(opts){
     durationMin,
     endMode: opts.endMode==="timed" ? "timed" : "plastic",
     startTime: Date.now(),
+    meta: opts.meta||null,
+    emails: opts.emails||[],
     turnId:0,
     helpTips: opts.tips!==false,
     diceSeq:0, lastDice:[],
@@ -1488,8 +1500,10 @@ window.toggleTips=toggleTips;
    IA HEURISTIQUE (jeu LOCAL uniquement) — joue automatiquement le tour d'un joueur IA
    ========================================================================= */
 function aiScheduleIfNeeded(){
-  if(NET.online || typeof G==="undefined" || !G || !G.started || G.over) return;
+  if(typeof G==="undefined" || !G || !G.started || G.over) return;
   const p=cur(); if(!p || !p.isAI) return;
+  // en ligne : seul l'hôte pilote les IA (les autres appareils ne font rien)
+  if(NET.online && !(window.Playroom && window.Playroom.isHost && window.Playroom.isHost())) return;
   if(G._aiActive || G._aiTimer) return;
   const ov=$("round-overlay");
   if(ov && ov.classList && ov.classList.contains("show")){ G._aiTimer=setTimeout(()=>{ G._aiTimer=null; aiScheduleIfNeeded(); }, 700); return; }
@@ -1497,7 +1511,8 @@ function aiScheduleIfNeeded(){
 }
 function aiPlayTurn(){
   const p=cur();
-  if(NET.online || !p || !p.isAI || G.over){ G._aiActive=false; return; }
+  if(!p || !p.isAI || G.over){ G._aiActive=false; return; }
+  if(NET.online && !(window.Playroom && window.Playroom.isHost && window.Playroom.isHost())){ G._aiActive=false; return; }
   G._aiActive=true;
   setHint("🤖 <b>"+p.name+"</b> (IA) joue son tour…");
   const steps=[ ()=>aiProduce(p), ()=>aiBuild(p), ()=>aiRecycle(p), ()=>{ G._aiActive=false; endTurn(); } ];
@@ -1780,7 +1795,7 @@ window.toggleBoard3D=toggleBoard3D;
 let view3D=false;
 const BOARD3D={inited:false,running:false,scene:null,cam:null,rnd:null,ray:null,tiles:[],content:null,
   az:0.5, el:0.95, dist:15, cz:0, down:null, moved:false};
-const SC=0.022, TILE_R=44*0.92*SC;
+const SC=0.022, TILE_R=44*SC*0.995;
 
 function toggleBoard3D(){
   view3D=!view3D;
@@ -1821,7 +1836,7 @@ function initBoard3D(){
     const isCoast=coast.has(c.key);
     const col= isCoast ? 0x9aa1a5 : 0x878c90;      // cases grises (côtes légèrement plus claires)
     const m=new THREE.Mesh(tileGeo,new THREE.MeshStandardMaterial({color:col,roughness:.95,metalness:.05}));
-    m.rotation.y=Math.PI/6;
+    m.rotation.y=Math.PI/6;   // pointy-top (sommet vers l'avant/arrière) comme la 2D -> tuiles emboîtées
     const z=px.y*SC-BOARD3D.cz;
     m.position.set(px.x*SC,-0.13,z);
     m.userData.key=c.key;
@@ -1885,22 +1900,44 @@ function matt(hex,rough){ return new window.THREE.MeshStandardMaterial({color:ne
 function mkBox(w,h,d,mat,y){ const m=new window.THREE.Mesh(new window.THREE.BoxGeometry(w,h,d),mat); m.position.y=(y==null?h/2:y); return m; }
 function mkCyl(rt,rb,h,mat,y){ const m=new window.THREE.Mesh(new window.THREE.CylinderGeometry(rt,rb,h,14),mat); m.position.y=(y==null?h/2:y); return m; }
 function mkCone(r,h,seg,mat,y){ const m=new window.THREE.Mesh(new window.THREE.ConeGeometry(r,h,seg||4),mat); m.position.y=y; return m; }
+function makeFarmer3D(){
+  const THREE=window.THREE, g=new THREE.Group();
+  const skin=matt("#e2b48c",.85), shirt=matt("#4a7fb0",.7), pants=matt("#5a4632",.85), hat=matt("#caa24a",.7);
+  g.add(mkBox(0.26,0.34,0.16,shirt,0.5));                        // torse
+  const legL=mkBox(0.1,0.32,0.12,pants,0.16); legL.position.x=-0.07; g.add(legL);
+  const legR=mkBox(0.1,0.32,0.12,pants,0.16); legR.position.x=0.07; g.add(legR);
+  const armL=mkBox(0.07,0.3,0.1,shirt,0.5); armL.position.set(-0.19,0,0); armL.rotation.z=0.25; g.add(armL);
+  const armR=mkBox(0.07,0.3,0.1,shirt,0.5); armR.position.set(0.19,0,0); armR.rotation.z=-0.25; g.add(armR);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.12,12,10),skin); head.position.y=0.78; g.add(head);
+  g.add(mkCyl(0.2,0.2,0.03,hat,0.85));                           // bord du chapeau
+  g.add(mkCone(0.13,0.16,14,hat,0.86));                          // haut du chapeau
+  return g;
+}
 function makeBuilding(type,lvl){
   const THREE=window.THREE, g=new THREE.Group(), col=B[type]?B[type].color:"#888";
   const body=matt(col,.7), dark=matt("#20303a",.6);
   const H=0.42+0.32*lvl;
   if(type==="habitation"){
     const wall=matt("#e7d9be",.85), roof=matt("#a9432f",.55);
-    const house=(w,hh,x,z)=>{ const gg=new THREE.Group(); gg.add(mkBox(w,hh,w,wall)); gg.add(mkCone(w*0.82,hh*0.75,4,roof,hh+hh*0.36)); gg.position.set(x,0,z); gg.rotation.y=Math.PI/4; return gg; };
+    const house=(w,hh,x,z)=>{
+      const gg=new THREE.Group();
+      gg.add(mkBox(w,hh,w,wall));
+      const rf=mkCone(w*0.74,hh*0.7,4,roof,hh+hh*0.35);
+      rf.rotation.y=Math.PI/4;   // aligne les 4 pentes du toit sur les 4 murs
+      gg.add(rf);
+      gg.position.set(x,0,z);
+      return gg;
+    };
     g.add(house(0.6,0.5,0,0));
     if(lvl>=2) g.add(house(0.48,0.42,0.42,0.3));
     if(lvl>=3) g.add(house(0.44,0.4,-0.36,0.34));
   }else if(type==="ferme"){
-    const wall=matt("#c1552f",.7), roof=matt("#e7d9be",.75), grass=matt("#4b7a3a",.95);
+    const grass=matt("#4b7a3a",.95), soil=matt("#6b5a3a",.9);
     g.add(mkBox(1.35,0.03,1.0,grass,0.015));                 // champ
-    const barn=new THREE.Group(); barn.add(mkBox(0.66,0.44,0.5,wall)); barn.add(mkCone(0.56,0.3,4,roof,0.44+0.15)); barn.position.set(-0.22,0,-0.05); barn.rotation.y=Math.PI/4; g.add(barn);
-    if(lvl>=2){ const hut=new THREE.Group(); hut.add(mkBox(0.34,0.3,0.3,matt("#8a5a3c",.75))); hut.add(mkCone(0.3,0.22,4,roof,0.3+0.1)); hut.position.set(0.34,0,0.24); hut.rotation.y=Math.PI/4; g.add(hut); }
-    if(lvl>=3){ for(let i=0;i<2;i++){ const s=mkCyl(0.12,0.12,0.5,matt("#d8c58f",.8),0.25); s.position.set(0.26+i*0.24,0,-0.3); g.add(s); const dome=new THREE.Mesh(new THREE.SphereGeometry(0.12,10,8,0,Math.PI*2,0,Math.PI/2),matt("#d8c58f",.8)); dome.position.set(0.26+i*0.24,0.5,-0.3); g.add(dome);} }
+    for(let i=0;i<4;i++){ const row=mkBox(1.15,0.05,0.07,soil,0.05); row.position.set(0,0,-0.33+i*0.22); g.add(row); }  // rangs cultivés
+    const f1=makeFarmer3D(); f1.position.set(-0.3,0,0.12); g.add(f1);   // paysan (remplace la maison)
+    if(lvl>=2){ const f2=makeFarmer3D(); f2.position.set(0.34,0,-0.08); f2.rotation.y=0.7; f2.scale.set(0.92,0.92,0.92); g.add(f2); }
+    if(lvl>=3){ for(let i=0;i<2;i++){ const s=mkCyl(0.12,0.12,0.5,matt("#d8c58f",.8),0.25); s.position.set(0.26+i*0.24,0,-0.34); g.add(s); const dome=new THREE.Mesh(new THREE.SphereGeometry(0.12,10,8,0,Math.PI*2,0,Math.PI/2),matt("#d8c58f",.8)); dome.position.set(0.26+i*0.24,0.5,-0.34); g.add(dome);} }
   }else if(type==="usine"){
     g.add(mkBox(1.0,H*0.8,0.92,body));
     for(let i=0;i<lvl;i++){ const ch=mkCyl(0.08,0.09,0.5+0.15*lvl,dark,H*0.8+(0.5+0.15*lvl)/2); ch.position.set(-0.3+i*0.3,0,-0.2); g.add(ch); }
@@ -2103,10 +2140,17 @@ function renderGulf(p){
 }
 
 function renderOthers(){
+  const online=NET.online;
   $("others").innerHTML=G.players.map((p,i)=>{
     const vp=quickVP(p);
+    let status="";
+    if(online){
+      const pid=(G.opts&&G.opts.playerIds)?G.opts.playerIds[i]:null;
+      const on = p.isAI || (pid && (pid===NET.myId || NET.connectedIds[pid]));
+      status=`<span class="stdot ${on?'on':'off'}" title="${p.isAI?'IA (pilotée par l’hôte)':(on?'en ligne':'hors ligne')}"></span>`;
+    }
     const me=i===G.cur?' style="outline:2px solid '+p.color+';cursor:pointer"':' style="cursor:pointer"';
-    return `<div class="opill" onclick="openPlayerView(${i})"${me} title="Voir le plateau de ${p.name}"><span class="d" style="background:${p.color}"></span>${p.name} · ${vp} P.v · ${p.res.recy}♻️ 🔍</div>`;
+    return `<div class="opill" onclick="openPlayerView(${i})"${me} title="Voir le plateau de ${p.name}">${status}<span class="d" style="background:${p.color}"></span>${p.name}${p.isAI?' 🤖':''} · ${vp} P.v · ${p.res.recy}♻️ 🔍</div>`;
   }).join("");
 }
 function renderBoardReadonly(svg, p){
@@ -2833,7 +2877,7 @@ window.addEventListener("resize",resizeHome);
 
 /* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
 /* Version de l'application — incrémenter à chaque nouvelle build. */
-const APP_VERSION = "V4.0";
+const APP_VERSION = "V4.2";
 if($("app-version")) $("app-version").textContent = APP_VERSION;
 if($("game-version")) $("game-version").textContent = APP_VERSION;
 
@@ -2865,7 +2909,7 @@ window.pickBuildType=pickBuildType;
    puis collez ici son identifiant. Laissé vide = mode développement Playroom. */
 const PLAYROOM_GAME_ID = "ngD0JunWQlaOiXezq15U";
 
-var NET = { online:false, seat:null, myId:null, players:[], applyingRemote:false, endShown:false, pollTimer:null, trLastV:0, trCur:null };
+var NET = { online:false, seat:null, myId:null, players:[], applyingRemote:false, endShown:false, pollTimer:null, trLastV:0, trCur:null, connectedIds:{}, aiCount:0, reconnect:false, welcomed:false };
 
 function showGameScreen(){ ["setup","local","online","end"].forEach(id=>$(id).classList.add("hidden")); $("game").classList.remove("hidden"); }
 function showLobbyScreen(){ ["setup","local","game","end"].forEach(id=>$(id).classList.add("hidden")); $("online").classList.remove("hidden"); }
@@ -2928,49 +2972,85 @@ function setupLobbyUI(){
 }
 function profName(pl,i){ const pr=pl.getProfile?pl.getProfile():{}; return (pr.name||("Joueur "+(i+1))).slice(0,16); }
 function renderLobbyPlayers(){
-  $("lobby-count").textContent=NET.players.length;
-  $("lobby-players").innerHTML=NET.players.map((pl,i)=>{
+  const aiN=window.Playroom.isHost()?NET.aiCount:0;
+  $("lobby-count").textContent=NET.players.length+aiN;
+  let html=NET.players.map((pl,i)=>{
     const col=PCOLORS[i]||"#888";
-    return `<div class="opill"><span class="d" style="background:${col}"></span>${playerNick(pl,i)}${pl.id===NET.myId?' (vous)':''}</div>`;
+    return `<div class="opill"><span class="stdot on"></span><span class="d" style="background:${col}"></span>${playerNick(pl,i)}${pl.id===NET.myId?' (vous)':''}</div>`;
   }).join("");
+  for(let a=0;a<aiN;a++){ const col=PCOLORS[NET.players.length+a]||"#888";
+    html+=`<div class="opill"><span class="stdot on"></span><span class="d" style="background:${col}"></span>IA ${a+1} 🤖</div>`; }
+  $("lobby-players").innerHTML=html;
   if(window.Playroom.isHost()){
-    const enough=NET.players.length>=2;
+    const total=NET.players.length+NET.aiCount;
+    const enough=total>=2;
     $("btn-launch").disabled=!enough;
-    $("lobby-hint").textContent=enough?"Prêt — vous pouvez démarrer.":"Il faut au moins 2 joueurs connectés.";
+    $("lobby-hint").textContent=enough?"Prêt — vous pouvez démarrer.":"Il faut au moins 2 joueurs (humains + IA).";
   }
 }
 function handlePlayerJoin(state){
   if(!NET.players.find(p=>p.id===state.id)) NET.players.push(state);
+  NET.connectedIds[state.id]=true;
   renderLobbyPlayers();
-  state.onQuit(()=>{ NET.players=NET.players.filter(p=>p.id!==state.id); renderLobbyPlayers(); });
+  if(G&&G.started&&!G.over) render();
+  state.onQuit(()=>{
+    NET.players=NET.players.filter(p=>p.id!==state.id);
+    delete NET.connectedIds[state.id];
+    renderLobbyPlayers();
+    if(G&&G.started&&!G.over) render();
+  });
 }
 function netOnConnected(){
   NET.online=true;
   NET.myId=window.Playroom.myPlayer().id;
+  // --- reconnexion : une partie est-elle déjà en cours dans ce salon ? ---
+  let existing=null; try{ existing=window.Playroom.getState("G"); }catch(e){}
+  if(existing && existing.started && !existing.over){
+    NET.reconnect=true;
+    window.Playroom.onPlayerJoin(handlePlayerJoin);
+    startPolling();
+    netApply(existing);
+    welcomeBack(existing);
+    return;
+  }
   $("lobby-connecting").classList.add("hidden");
   $("lobby-main").classList.remove("hidden");
   setupLobbyUI();
   const host=window.Playroom.isHost();
   if(host){ $("host-controls").classList.remove("hidden"); $("guest-wait").classList.add("hidden"); $("lobby-role").textContent="Vous êtes l'hôte de la partie."; }
   else { $("host-controls").classList.add("hidden"); $("guest-wait").classList.remove("hidden"); $("lobby-role").textContent="Vous avez rejoint la partie."; }
-  // le QR/lien de partage n'est utile qu'à l'hôte (les invités ont déjà rejoint)
   if($("host-share")) $("host-share").style.display = host ? "" : "none";
-  // pseudo : préremplir avec le profil, publier à chaque saisie
+  // pseudo + e-mail : préremplir et publier
   const nameEl=$("lob-name");
   if(nameEl){
     try{ const pr=window.Playroom.myPlayer().getProfile?window.Playroom.myPlayer().getProfile():{}; nameEl.value=(pr.name||"").slice(0,16); }catch(e){}
-    const publish=()=>{ try{ window.Playroom.myPlayer().setState("nick", (nameEl.value||"").slice(0,16), true); }catch(e){} renderLobbyPlayers(); };
+    const publish=()=>{ try{ window.Playroom.myPlayer().setState("nick",(nameEl.value||"").slice(0,16),true); }catch(e){} renderLobbyPlayers(); };
     nameEl.oninput=publish; publish();
   }
+  const mailEl=$("lob-email");
+  if(mailEl){ mailEl.oninput=()=>{ try{ window.Playroom.myPlayer().setState("email",(mailEl.value||"").slice(0,80),true); }catch(e){} }; }
   window.Playroom.onPlayerJoin(handlePlayerJoin);
   startPolling();
 }
 function playerNick(pl,i){ try{ const n=pl.getState&&pl.getState("nick"); if(n) return String(n).slice(0,16); }catch(e){} return profName(pl,i); }
+function welcomeBack(g){
+  if(NET.welcomed) return; NET.welcomed=true;
+  const m=(g&&g.meta)||{};
+  const when=m.createdAt?new Date(m.createdAt).toLocaleString("fr-FR"):"";
+  const msg=`Vous êtes de nouveau connecté à la partie ${m.room||""}`+
+    (m.creator?` créée par ${m.creator}`:"")+(when?` le ${when}`:"")+".";
+  showToast(msg);
+}
+function showToast(msg){
+  const t=$("reconnect-toast"); if(!t) return;
+  t.textContent=msg; t.classList.add("show");
+  setTimeout(()=>{ t.classList.remove("show"); }, 6500);
+}
 
 /* ---- boutons ---- */
-$("btn-online").onclick=async ()=>{
+async function connectOnline(auto){
   if(!window.Playroom){
-    alert(window.__PLAYROOM_ERROR
+    if(!auto) alert(window.__PLAYROOM_ERROR
       ? "Le module multijoueur n'a pas pu se charger (connexion Internet requise)."
       : "Le module multijoueur est encore en cours de chargement, réessayez dans un instant.");
     return;
@@ -2980,7 +3060,7 @@ $("btn-online").onclick=async ()=>{
   $("lobby-main").classList.add("hidden");
   $("lobby-error").classList.add("hidden");
   try{
-    const opts={ skipLobby:true, maxPlayersPerRoom:4 };
+    const opts={ skipLobby:true, maxPlayersPerRoom:8 };
     if(PLAYROOM_GAME_ID) opts.gameId=PLAYROOM_GAME_ID;
     await window.Playroom.insertCoin(opts);
     netOnConnected();
@@ -2988,21 +3068,41 @@ $("btn-online").onclick=async ()=>{
     lobbyError("Connexion impossible : "+(e&&e.message?e.message:e)+
       "\n\nVérifiez que le jeu est servi via une adresse http(s) (hébergé en ligne) et non ouvert comme fichier local, et que l'identifiant de partie Playroom est renseigné.");
   }
-};
+}
+$("btn-online").onclick=()=>connectOnline(false);
+// Ouverture via lien/QR d'une partie : on se connecte automatiquement (join ou reconnexion)
+(function autoJoinFromUrl(){
+  var href=(window.location&&window.location.href)||"";
+  if(!/[?#&]r=/.test(href)) return;
+  let tries=0;
+  const iv=setInterval(()=>{
+    if(window.Playroom){ clearInterval(iv); connectOnline(true); }
+    else if(window.__PLAYROOM_ERROR || ++tries>60){ clearInterval(iv); }
+  },100);
+})();
 
+(function(){
+  const upd=()=>{ if($("ai-count")) $("ai-count").textContent=NET.aiCount; renderLobbyPlayers(); };
+  if($("ai-plus")) $("ai-plus").onclick=()=>{ NET.aiCount=Math.min(6,NET.aiCount+1); upd(); };
+  if($("ai-minus")) $("ai-minus").onclick=()=>{ NET.aiCount=Math.max(0,NET.aiCount-1); upd(); };
+})();
 $("btn-launch").onclick=()=>{
-  if(NET.players.length<2) return;
   const list=NET.players.slice();
-  const names=list.map((pl,i)=>playerNick(pl,i));
-  const seats={}, playerIds=[];
-  list.forEach((pl,i)=>{ seats[pl.id]=i; playerIds.push(pl.id); });
+  const total=list.length+NET.aiCount;
+  if(total<2){ $("lobby-hint").textContent="Il faut au moins 2 joueurs (humains + IA)."; return; }
+  const names=[], seats={}, playerIds=[], ai=[], emails=[];
+  list.forEach((pl,i)=>{ names.push(playerNick(pl,i)); seats[pl.id]=i; playerIds.push(pl.id); ai.push(false);
+    let em=""; try{ em=(pl.getState&&pl.getState("email"))||""; }catch(e){} emails.push(em); });
+  for(let a=0;a<NET.aiCount;a++){ const seat=list.length+a; names.push("IA "+(a+1)); playerIds.push("AI"+a); ai.push(true); emails.push(""); }
   NET.seat=seats[NET.myId];
-  const opts={ names, objectives:$("lob-obj").checked, cat:$("lob-cat").checked, seats, playerIds,
+  const room=(window.Playroom.getRoomCode&&window.Playroom.getRoomCode())||"";
+  const opts={ names, ai, emails, objectives:$("lob-obj").checked, cat:$("lob-cat").checked, seats, playerIds,
     tips:$("opt-tips")?$("opt-tips").checked:true,
     durationMin: $("opt-dur")? +$("opt-dur").value : 30,
-    endMode: ($("opt-timed")&&$("opt-timed").checked)? "timed":"plastic" };
+    endMode: ($("opt-timed")&&$("opt-timed").checked)? "timed":"plastic",
+    meta:{ creator:names[NET.seat]||"l'hôte", createdAt:Date.now(), room } };
   showGameScreen();
-  initGame(opts);   // démarre + render()->netPush() diffuse l'état initial (seats inclus)
+  initGame(opts);
 };
 
 /* ---- diffusion automatique : chaque render local pousse l'état ---- */
