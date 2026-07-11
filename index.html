@@ -250,9 +250,11 @@ svg.gulf{width:100%;max-width:360px;height:auto}
 .stepper button{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.12);border:1px solid var(--line);color:#fff;font-size:22px;font-weight:800;line-height:1}
 .stepper .stval{min-width:44px;text-align:center;font-size:22px;font-weight:900}
 .stepper small{color:#9fc1bc}
-.stdot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:4px;flex:none}
-.stdot.on{background:#37d67a;box-shadow:0 0 6px rgba(55,214,122,.7)}
-.stdot.off{background:#7d8a8a}
+.card h3{display:flex;align-items:center}
+.card h3 .tips-toggle{margin-left:auto}
+.stdot{width:11px;height:11px;border-radius:50%;display:inline-block;margin-right:5px;flex:none;box-sizing:border-box}
+.stdot.on{background:#37d67a;border:2px solid #eafff6;box-shadow:0 0 6px rgba(55,214,122,.9)}
+.stdot.off{background:transparent;border:2px solid #8b9a9a}
 #reconnect-toast{position:fixed;left:50%;top:14px;transform:translateX(-50%) translateY(-120%);z-index:300;max-width:92vw;background:linear-gradient(180deg,#125b4e,#0d3f38);color:#eafff6;border:1px solid rgba(127,224,176,.4);border-radius:12px;padding:12px 16px;font-size:13px;font-weight:600;box-shadow:0 12px 30px rgba(0,0,0,.4);transition:transform .4s ease;text-align:center}
 #reconnect-toast.show{transform:translateX(-50%) translateY(0)}
 
@@ -388,6 +390,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
     <div class="brand">
       <div class="logo">EC<span class="recy-o">♻</span>LLAPSE</div>
     </div>
+    <div class="ver-tag" id="setup-version" style="text-align:center;margin:-6px 0 10px"></div>
     <p class="tagline">Bâtissez votre société, produisez, échangez… et polluez. Chaque action a une conséquence. Le plus de points de victoire l'emporte.</p>
 
     <div class="field">
@@ -550,7 +553,6 @@ svg.gulf{width:100%;max-width:360px;height:auto}
       <b><span id="plastic-n">0</span>/<span id="plastic-max">30</span></b>
     </div>
   </div>
-  <div class="ver-tag" id="game-version"></div>
 
   <div class="layout">
     <!-- LEFT -->
@@ -616,13 +618,13 @@ svg.gulf{width:100%;max-width:360px;height:auto}
       </div>
 
       <div class="card">
-        <h3>Bâtiments</h3>
-        <div class="legend" id="legend"></div>
+        <h3>Journal <button class="tips-toggle" id="log-toggle" onclick="togglePanel('log')">masquer</button></h3>
+        <div class="log" id="log"></div>
       </div>
 
       <div class="card">
-        <h3>Journal</h3>
-        <div class="log" id="log"></div>
+        <h3>Bâtiments <button class="tips-toggle" id="legend-toggle" onclick="togglePanel('legend')">masquer</button></h3>
+        <div class="legend" id="legend"></div>
       </div>
     </div>
   </div>
@@ -1035,13 +1037,13 @@ function startTurn(){
   if(rot===0) log("🧊 "+p.name+" : Gulf Stream immobilisé.");
   else if(rot===2) log("🌊 "+p.name+" : Gulf Stream avance de 2 cases.");
 
-  // 2) taxe d'habitation
-  payHousingTax(p);
+  // 2) taxe d'habitation (placement interactif de la pénalité si impayée, sauf IA)
+  const taxPending = payHousingTax(p);
 
   // bonus coopérative (variante 2) — non implémenté
 
   render();
-  setHint(`<b>Tour de ${p.name}.</b> Faites vos actions (production, construction, recyclage), puis terminez.`);
+  if(!taxPending) setHint(`<b>Tour de ${p.name}.</b> Faites vos actions (production, construction, recyclage), puis terminez.`);
 }
 
 function rotateGulf(steps){
@@ -1055,13 +1057,14 @@ function rotateGulf(steps){
 
 function payHousingTax(p){
   const tax=cntType(p,"habitation");
-  if(tax===0) return;
-  if(p.res.food>=tax){ p.res.food-=tax; log("🏠 "+p.name+" paie "+tax+"🍎 de taxe d'habitation."); }
-  else{
-    const deficit=tax-p.res.food; p.res.food=0;
-    log("⚠️ "+p.name+" : taxe impayée — "+deficit+" pollution placée(s).");
-    for(let i=0;i<deficit;i++) autoPlaceBoardPollution(p);
-  }
+  if(tax===0) return false;
+  if(p.res.food>=tax){ p.res.food-=tax; log("🏠 "+p.name+" paie "+tax+"🍎 de taxe d'habitation."); return false; }
+  const deficit=tax-p.res.food; p.res.food=0;
+  log("⚠️ "+p.name+" : taxe impayée — "+deficit+" pollution à placer.");
+  if(p.isAI){ for(let i=0;i<deficit;i++) autoPlaceBoardPollution(p); return false; }
+  beginPollutionPlacement(p,deficit,"tax");
+  setHint(`<b>Taxe d'habitation impayée.</b> Placez vous-même ${deficit} pollution de pénalité : cliquez une case libre (Niv.1), re-cliquez pour empiler, ou une case de votre Gulf Stream.`);
+  return true;
 }
 
 function endTurn(){
@@ -1329,7 +1332,10 @@ function placePollutionOnGulf(slotIdx,lvl){
 }
 function afterPollutionPlaced(p){
   G.pending.remaining--;
-  if(G.pending.remaining<=0){ markPhaseDone(); }
+  if(G.pending.remaining<=0){
+    if(G.pending.origin==="tax"){ clearPending(); render(); setHint(`<b>Tour de ${p.name}.</b> Pénalité placée — faites vos actions, puis terminez.`); }
+    else markPhaseDone();
+  }
   else{ render(); }
 }
 
@@ -1500,6 +1506,13 @@ function renderTips(p){
   box.innerHTML=computeTips(p).map(t=>`<div class="tip"><span class="ti">${t.ic}</span><span>${t.t}</span></div>`).join("");
 }
 window.toggleTips=toggleTips;
+const _panelHidden={};
+function togglePanel(id){
+  _panelHidden[id]=!_panelHidden[id];
+  const el=$(id); if(el) el.style.display=_panelHidden[id]?"none":"";
+  const btn=$(id+"-toggle"); if(btn) btn.textContent=_panelHidden[id]?"afficher":"masquer";
+}
+window.togglePanel=togglePanel;
 
 /* =========================================================================
    IA HEURISTIQUE (jeu LOCAL uniquement) — joue automatiquement le tour d'un joueur IA
@@ -1842,6 +1855,8 @@ function initBoard3D(){
   BOARD3D.cz=(Math.min(...ys)+Math.max(...ys))/2;
   const coast=new Set(COAST_CELLS.map(c=>c.key)), conn=new Set(COAST_CONNECTED);
   const tileGeo=new THREE.CylinderGeometry(TILE_R,TILE_R,0.25,6);
+  const tileEdges=new THREE.EdgesGeometry(tileGeo);
+  const edgeMat=new THREE.LineBasicMaterial({color:0x23484f});
   let frontZ=-99, halfX=0;
   CELLS.forEach(c=>{
     const px=hexPixel(c.q,c.r);
@@ -1853,6 +1868,8 @@ function initBoard3D(){
     m.position.set(px.x*SC,-0.13,z);
     m.userData.key=c.key;
     scene.add(m); BOARD3D.tiles.push(m);
+    const edge=new THREE.LineSegments(tileEdges,edgeMat);   // trait fin de séparation
+    edge.position.copy(m.position); scene.add(edge);
     if(z>frontZ) frontZ=z; halfX=Math.max(halfX,Math.abs(px.x*SC));
   });
   // ciel
@@ -1905,8 +1922,13 @@ function pick3D(e){
   const THREE=window.THREE, cv=$("board3d"), rect=cv.getBoundingClientRect();
   const v=new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
   BOARD3D.ray.setFromCamera(v,BOARD3D.cam);
-  const hit=BOARD3D.ray.intersectObjects(BOARD3D.tiles,false)[0];
-  if(hit&&hit.object.userData.key){ onBoardClick(hit.object.userData.key); }
+  const targets=BOARD3D.tiles.concat(BOARD3D.content?BOARD3D.content.children:[]);
+  const hits=BOARD3D.ray.intersectObjects(targets,true);
+  if(hits.length){
+    let o=hits[0].object;
+    while(o && !(o.userData&&o.userData.key)) o=o.parent;
+    if(o&&o.userData&&o.userData.key) onBoardClick(o.userData.key);
+  }
 }
 function matt(hex,rough){ return new window.THREE.MeshStandardMaterial({color:new window.THREE.Color(hex),roughness:rough==null?0.7:rough,metalness:0.08}); }
 function mkBox(w,h,d,mat,y){ const m=new window.THREE.Mesh(new window.THREE.BoxGeometry(w,h,d),mat); m.position.y=(y==null?h/2:y); return m; }
@@ -1945,11 +1967,11 @@ function makeBuilding(type,lvl){
     if(lvl>=3) g.add(house(0.44,0.4,-0.36,0.34));
   }else if(type==="ferme"){
     const grass=matt("#4b7a3a",.95), soil=matt("#6b5a3a",.9);
-    g.add(mkBox(1.35,0.03,1.0,grass,0.015));                 // champ
-    for(let i=0;i<4;i++){ const row=mkBox(1.15,0.05,0.07,soil,0.05); row.position.set(0,0,-0.33+i*0.22); g.add(row); }  // rangs cultivés
-    const f1=makeFarmer3D(); f1.position.set(-0.3,0,0.12); g.add(f1);   // paysan (remplace la maison)
-    if(lvl>=2){ const f2=makeFarmer3D(); f2.position.set(0.34,0,-0.08); f2.rotation.y=0.7; f2.scale.set(0.92,0.92,0.92); g.add(f2); }
-    if(lvl>=3){ for(let i=0;i<2;i++){ const s=mkCyl(0.12,0.12,0.5,matt("#d8c58f",.8),0.25); s.position.set(0.26+i*0.24,0,-0.34); g.add(s); const dome=new THREE.Mesh(new THREE.SphereGeometry(0.12,10,8,0,Math.PI*2,0,Math.PI/2),matt("#d8c58f",.8)); dome.position.set(0.26+i*0.24,0.5,-0.34); g.add(dome);} }
+    const field=new THREE.Mesh(new THREE.CylinderGeometry(TILE_R*0.9,TILE_R*0.9,0.06,6),grass); field.position.y=0.03; g.add(field);  // champ hexagonal à la taille de la case
+    for(let i=0;i<4;i++){ const row=mkBox(TILE_R*1.35,0.05,0.09,soil,0.09); row.position.set(0,0,-0.42+i*0.28); g.add(row); }  // rangs cultivés
+    const f1=makeFarmer3D(); f1.position.set(-0.3,0.06,0.12); g.add(f1);   // paysan (remplace la maison)
+    if(lvl>=2){ const f2=makeFarmer3D(); f2.position.set(0.34,0.06,-0.08); f2.rotation.y=0.7; f2.scale.set(0.92,0.92,0.92); g.add(f2); }
+    if(lvl>=3){ for(let i=0;i<2;i++){ const s=mkCyl(0.12,0.12,0.5,matt("#d8c58f",.8),0.3); s.position.set(0.26+i*0.24,0,-0.34); g.add(s); const dome=new THREE.Mesh(new THREE.SphereGeometry(0.12,10,8,0,Math.PI*2,0,Math.PI/2),matt("#d8c58f",.8)); dome.position.set(0.26+i*0.24,0.55,-0.34); g.add(dome);} }
   }else if(type==="usine"){
     g.add(mkBox(1.0,H*0.8,0.92,body));
     for(let i=0;i<lvl;i++){ const ch=mkCyl(0.08,0.09,0.5+0.15*lvl,dark,H*0.8+(0.5+0.15*lvl)/2); ch.position.set(-0.3+i*0.3,0,-0.2); g.add(ch); }
@@ -1986,7 +2008,7 @@ function syncBoard3D(p){
     if(c.kind==="building") obj=makeBuilding(c.type,c.lvl||1);
     else if(c.kind==="pawn") obj=makePawn();
     else if(c.kind==="pollution") obj=makePollution(c.lvl||1);
-    if(obj){ obj.position.set(px.x*SC,0,px.y*SC-BOARD3D.cz); grp.add(obj); }
+    if(obj){ obj.position.set(px.x*SC,0,px.y*SC-BOARD3D.cz); obj.userData.key=key; grp.add(obj); }
   });
 }
 function countPawns(p){return Object.values(p.board).filter(c=>c.kind==="pawn").length + p.reservePawns;}
@@ -2431,28 +2453,33 @@ function trSend(msg){
   try{ window.Playroom.setState("TRADE", msg, true); }catch(e){}
 }
 function isNetHost(){ return window.Playroom && window.Playroom.isHost && window.Playroom.isHost(); }
-function aiTradeValue(ai,k,q){
-  if(q<=0) return 0;
-  let w=1;
-  if(k==="recy") w=1.5;
-  if(ai.res[k]<=1) w+=0.4;
-  return q*w;
-}
-function aiDecideTrade(ai,recv,give){
-  if(give.q>0 && ai.res[give.k] < give.q) return false;
-  const prof=ai._aiProf||aiProfile(ai);
-  let recvV=aiTradeValue(ai,recv.k,recv.q), giveV=aiTradeValue(ai,give.k,give.q);
-  if(prof.hoard) giveV*=1.3;
-  return recvV >= giveV*0.95;
+function aiCanProduce(ai,k){ return Object.values(ai.board).some(c=>c.kind==="building"&&B[c.type]&&B[c.type].produces===k); }
+function aiRecvValue(ai,k,q){ if(q<=0) return 0; let w=1; if(k==="recy") w=1.5; if(!aiCanProduce(ai,k)&&k!=="recy") w+=0.3; if(ai.res[k]<=1) w+=0.2; return q*w; }
+function aiGiveValue(ai,k,q){ if(q<=0) return 0; let w=1; if(k==="recy") w=1.6; if(!aiCanProduce(ai,k)&&k!=="recy") w+=0.35; const prof=ai._aiProf||aiProfile(ai); if(prof.hoard) w+=0.3; if(prof.focusType&&B[prof.focusType]&&B[prof.focusType].produces===k) w-=0.15; return q*w; }
+function aiEvaluateTrade(ai,recv,give,round){
+  if(give.q>0 && ai.res[give.k] < give.q) return {action:"refuse"};
+  const rv=aiRecvValue(ai,recv.k,recv.q), gv=aiGiveValue(ai,give.k,give.q);
+  if(rv>=gv*1.03) return {action:"accept"};
+  // marge de négociation -> contre-proposition (une ou deux fois), pour rendre l'échange plus équitable/avantageux
+  if((round||1)<3 && rv>=gv*0.6){
+    // termes du point de vue de l'initiateur : gq = ce que l'initiateur donne à l'IA ; rq = ce que l'IA cède
+    let gq=recv.q, rq=give.q;
+    if(rq>0) rq=Math.max(0,rq-1);       // l'IA cède moins
+    else gq=gq+1;                        // ou l'IA reçoit plus
+    if(gq<=0 && rq<=0) return {action:"refuse"};
+    return {action:"counter", giveK:recv.k, gq, reqK:give.k, rq};
+  }
+  return {action:"refuse"};
 }
 function aiRespondTrade(t){
-  const responder=t.to;
+  const responder=t.to;                  // l'IA est toujours la cible (elle n'initie pas)
   const ai=G.players[responder]; if(!ai || !ai.isAI) return;
   const recv={k:t.giveK,q:t.gq}, give={k:t.reqK,q:t.rq};
-  const accept=aiDecideTrade(ai,recv,give);
+  const ev=aiEvaluateTrade(ai,recv,give,t.round||1);
   setTimeout(()=>{
-    trSend(Object.assign({},t,{status: accept?"accepted":"refused", by:responder}));
-    log(`🤖 ${ai.name} (IA) ${accept?"accepte":"refuse"} l'échange proposé par ${G.players[t.from].name}.`);
+    if(ev.action==="accept"){ trSend(Object.assign({},t,{status:"accepted",by:responder})); log(`🤖 ${ai.name} (IA) accepte l'échange.`); }
+    else if(ev.action==="counter"){ trSend(Object.assign({},t,{giveK:ev.giveK,gq:ev.gq,reqK:ev.reqK,rq:ev.rq,status:"counter",by:responder,round:(t.round||1)+1})); log(`🤖 ${ai.name} (IA) fait une contre-proposition.`); }
+    else { trSend(Object.assign({},t,{status:"refused",by:responder})); log(`🤖 ${ai.name} (IA) refuse l'échange.`); }
   }, 700);
 }
 function trPropose(toSeat,giveK,gq,reqK,rq){
@@ -2514,9 +2541,10 @@ function trShowRespondModal(t){
 function trHandle(t){
   if(!t || !G || !G.started || G.over) return;
   const me=NET.seat; if(me==null) return;
-  // Hôte : répondre à la place d'une IA ciblée par une proposition reçue via le réseau
-  if(t.status==="pending" && isNetHost() && G.players[t.to] && G.players[t.to].isAI){
-    aiRespondTrade(t); return;
+  // Hôte : l'IA (via l'hôte) évalue toute proposition/contre-proposition qui lui revient
+  if((t.status==="pending"||t.status==="counter") && isNetHost()){
+    const responder=(t.status==="counter")?(t.by===t.to?t.from:t.to):t.to;
+    if(responder===t.to && G.players[t.to] && G.players[t.to].isAI){ aiRespondTrade(t); return; }
   }
   if(me!==t.from && me!==t.to) { NET.trCur=null; return; }   // pas concerné
   if(t.status==="pending" && me===t.to){ trShowRespondModal(t); }
@@ -2921,9 +2949,9 @@ window.addEventListener("resize",resizeHome);
 
 /* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
 /* Version de l'application — incrémenter à chaque nouvelle build. */
-const APP_VERSION = "V4.3";
+const APP_VERSION = "V4.4";
 if($("app-version")) $("app-version").textContent = APP_VERSION;
-if($("game-version")) $("game-version").textContent = APP_VERSION;
+if($("setup-version")) $("setup-version").textContent = APP_VERSION;
 
 (function startHome(){
   if(window.THREE){initHome3D();return;}
@@ -3051,6 +3079,7 @@ function netOnConnected(){
   let existing=null; try{ existing=window.Playroom.getState("G"); }catch(e){}
   if(existing && existing.started && !existing.over){
     NET.reconnect=true;
+    try{ _shownDiceSeq = existing.diceSeq||0; }catch(e){}
     window.Playroom.onPlayerJoin(handlePlayerJoin);
     startPolling();
     netApply(existing);
@@ -3079,11 +3108,22 @@ function netOnConnected(){
 function playerNick(pl,i){ try{ const n=pl.getState&&pl.getState("nick"); if(n) return String(n).slice(0,16); }catch(e){} return profName(pl,i); }
 function welcomeBack(g){
   if(NET.welcomed) return; NET.welcomed=true;
+  try{ _shownDiceSeq = g.diceSeq||0; }catch(e){}          // pas de rejeu des dés / fin de tour
+  const ov=$("round-overlay"); if(ov&&ov.classList) ov.classList.remove("show");
   const m=(g&&g.meta)||{};
   const when=m.createdAt?new Date(m.createdAt).toLocaleString("fr-FR"):"";
-  const msg=`Vous êtes de nouveau connecté à la partie ${m.room||""}`+
-    (m.creator?` créée par ${m.creator}`:"")+(when?` le ${when}`:"")+".";
-  showToast(msg);
+  const curName=(g.players&&g.players[g.cur])?g.players[g.cur].name:"—";
+  const mine=(NET.seat===g.cur);
+  const mount=$("modal-mount");
+  if(mount){
+    mount.innerHTML=`<div class="modal"><div class="sheet">
+      <h2>🔌 Reconnexion</h2>
+      <p class="sub">Vous avez rejoint la partie${m.creator?` de <b>${m.creator}</b>`:""}${when?`, créée le <b>${when}</b>`:""}.</p>
+      <div style="font-size:15px;margin:10px 0">C'est au tour de <b>${curName}</b>${mine?" — <b>c'est vous !</b>":""}.</div>
+      <div class="closebar"><button id="rc-ok" style="background:#fff;color:#0e2a2e">Continuer</button></div>
+    </div></div>`;
+    if($("rc-ok")) $("rc-ok").onclick=closeModal;
+  }
 }
 function showToast(msg){
   const t=$("reconnect-toast"); if(!t) return;
