@@ -504,7 +504,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
         <p style="font-size:12px;color:#9fc1bc;margin:0 0 10px">Les options de partie (objectifs, catastrophe, durée, conseils…) sont celles réglées sur l'écran de configuration.</p>
         <div class="field">
           <label>Rappels Discord (facultatif)</label>
-          <input id="discord-webhook" type="text" placeholder="URL du webhook Discord de votre salon" style="width:100%;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--paper)">
+          <input id="discord-webhook" type="text" value="https://discord.com/api/webhooks/1525635789353123981/5wddG075ttuV4g1cWq9ruEofrdYMOIc5uWmULbYr9W5WNHHfejzTmUEEYVCTRpY1XwKf" placeholder="URL du webhook Discord de votre salon" style="width:100%;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--paper)">
           <small style="color:#9fc1bc">Salon Discord → Paramètres → Intégrations → Webhooks → Nouveau webhook → Copier l'URL. Un message est posté quand c'est le tour d'un joueur <b>hors ligne</b>.</small>
         </div>
         <button class="start" id="btn-launch">Démarrer la partie</button>
@@ -595,6 +595,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
           <button class="act end" id="act-end"><span class="a-ic">⏭️</span>Terminer le tour</button>
         </div>
         <div class="hint" id="hint">Sélectionnez une action. Vous pouvez en faire plusieurs avant de terminer votre tour.</div>
+        <button id="btn-abandon" onclick="abandonGame()" style="margin-top:10px;width:100%;padding:9px;border-radius:10px;background:transparent;border:1px solid #7a2f2f;color:#e6a79c;font-weight:700;cursor:pointer">🏳️ Abandonner la partie</button>
       </div>
 
       <div class="card tips-card" id="tips-card">
@@ -1574,6 +1575,21 @@ function togglePanel(id){
   const btn=$(id+"-toggle"); if(btn) btn.textContent=_panelHidden[id]?"afficher":"masquer";
 }
 window.togglePanel=togglePanel;
+function abandonGame(){
+  const mount=$("modal-mount"); if(!mount) return;
+  mount.innerHTML=`<div class="modal"><div class="sheet">
+    <h2>🏳️ Abandonner la partie</h2>
+    <p class="sub">Voulez-vous vraiment quitter cette partie ? Vous reviendrez à l'écran d'accueil. Les autres joueurs peuvent continuer.</p>
+    <div class="closebar"><button id="ab-no">Annuler</button><button id="ab-yes" style="background:#7a2f2f;color:#ffd9d0">Abandonner</button></div>
+  </div></div>`;
+  if($("ab-no")) $("ab-no").onclick=closeModal;
+  if($("ab-yes")) $("ab-yes").onclick=()=>{
+    try{ const room=(G&&G.meta&&G.meta.room)||""; if(room) localStorage.removeItem("ecseat_"+room); }catch(e){}
+    try{ if(window.Playroom && window.Playroom.quitRoom) window.Playroom.quitRoom(); }catch(e){}
+    const loc=window.location; window.location.href=(loc.origin||"")+(loc.pathname||"");   // retour à l'accueil, sans code de partie
+  };
+}
+window.abandonGame=abandonGame;
 
 /* =========================================================================
    IA HEURISTIQUE (jeu LOCAL uniquement) — joue automatiquement le tour d'un joueur IA
@@ -3056,7 +3072,7 @@ window.addEventListener("resize",resizeHome);
 
 /* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
 /* Version de l'application — incrémenter à chaque nouvelle build. */
-const APP_VERSION = "V4.8";
+const APP_VERSION = "V4.9";
 if($("app-version")) $("app-version").textContent = APP_VERSION;
 if($("setup-version")) $("setup-version").textContent = APP_VERSION;
 
@@ -3124,11 +3140,25 @@ function netPoll(){
   let tr; try{ tr=window.Playroom.getState("TRADE"); }catch(e){ tr=null; }
   if(tr && tr.v && tr.v!==NET.trLastV){ NET.trLastV=tr.v; trHandle(tr); }
 }
+function saveSeatLocal(){
+  try{ const room=(G&&G.meta&&G.meta.room)||""; if(room && typeof NET.seat==="number") localStorage.setItem("ecseat_"+room, String(NET.seat)); }catch(e){}
+}
+function resolveMySeat(g){
+  const seats=(g&&g.opts&&g.opts.seats)||{};
+  if(typeof seats[NET.myId]==="number") return seats[NET.myId];      // 1) identifiant Playroom
+  const room=(g&&g.meta&&g.meta.room)||"";
+  try{ const s=localStorage.getItem("ecseat_"+room); if(s!==null&&s!==""){ const n=parseInt(s,10); if(!isNaN(n)&&g.players[n]&&!g.players[n].isAI) return n; } }catch(e){}  // 2) mémoire du navigateur
+  let myNick=""; try{ const mp=window.Playroom.myPlayer(); myNick=(mp.getState&&mp.getState("nick"))||(mp.getProfile&&mp.getProfile().name)||""; }catch(e){}
+  myNick=(myNick||"").slice(0,16);
+  if(myNick){ for(let i=0;i<g.players.length;i++){ if(!g.players[i].isAI && g.players[i].name===myNick) return i; } }  // 3) pseudo
+  return null;
+}
 function netApply(remote){
   NET.applyingRemote=true;
   try{
     G=netDecode(remote);
-    NET.seat=(G.opts&&G.opts.seats&&typeof G.opts.seats[NET.myId]==="number")?G.opts.seats[NET.myId]:null;
+    const seat=resolveMySeat(G);
+    if(seat!=null){ NET.seat=seat; saveSeatLocal(); }
     if(G.over){ if(!NET.endShown){ endGame(G.overReason); } }
     else { showGameScreen(); render(); }
   } finally { NET.applyingRemote=false; }
@@ -3302,6 +3332,7 @@ $("btn-launch").onclick=()=>{
     meta:{ creator:names[NET.seat]||"l'hôte", createdAt:Date.now(), room } };
   showGameScreen();
   initGame(opts);
+  saveSeatLocal();
 };
 
 /* ---- diffusion automatique : chaque render local pousse l'état ---- */
