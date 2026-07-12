@@ -1481,8 +1481,9 @@ function designatedSender(){
   return -1;
 }
 function buildJoinLink(){
-  const room=(typeof G!=="undefined"&&G&&G.meta&&G.meta.room)||"";
   const loc=window.location||{};
+  if(loc.href && /[?#&]r=/.test(loc.href)) return loc.href;   // URL exacte de la partie en cours (code correct, ex. R2SLD)
+  const room=(typeof G!=="undefined"&&G&&G.meta&&G.meta.room)||"";
   const base=(loc.origin||"")+(loc.pathname||"");
   return room? base+"#r="+room : base;
 }
@@ -3055,7 +3056,7 @@ window.addEventListener("resize",resizeHome);
 
 /* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
 /* Version de l'application — incrémenter à chaque nouvelle build. */
-const APP_VERSION = "V4.7";
+const APP_VERSION = "V4.8";
 if($("app-version")) $("app-version").textContent = APP_VERSION;
 if($("setup-version")) $("setup-version").textContent = APP_VERSION;
 
