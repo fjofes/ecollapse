@@ -491,12 +491,6 @@ svg.gulf{width:100%;max-width:360px;height:auto}
       </div>
 
       <div class="field">
-        <label>E‑mail (optionnel)</label>
-        <input id="lob-email" type="email" placeholder="pour de futurs rappels de tour (facultatif)" style="width:100%;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--paper)">
-        <small style="color:#9fc1bc">Non bloquant — les rappels par e‑mail arriveront dans une prochaine version.</small>
-      </div>
-
-      <div class="field">
         <label>ID Discord (facultatif)</label>
         <input id="lob-discord" type="text" placeholder="votre ID Discord pour être mentionné" style="width:100%;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--paper)">
         <small style="color:#9fc1bc">Discord → Paramètres → Avancés → Mode développeur, puis clic droit sur votre nom → Copier l'identifiant. Permet de vous mentionner (@) dans le rappel.</small>
@@ -869,8 +863,9 @@ function initGame(opts){
     endMode: opts.endMode==="timed" ? "timed" : "plastic",
     startTime: Date.now(),
     meta: opts.meta||null,
-    emails: opts.emails||[],
     discord: opts.discord||[],
+    discordWebhook: opts.discordWebhook||"",
+    notifiedTurn: -1,
     turnId:0,
     helpTips: opts.tips!==false,
     diceSeq:0, lastDice:[],
@@ -1470,27 +1465,48 @@ function render(){
   aiScheduleIfNeeded();
   notifyDiscordIfNeeded();
 }
+function discordSend(content){
+  const wh=(typeof G!=="undefined"&&G&&G.discordWebhook)||"";
+  if(!wh) return;
+  try{ fetch(wh,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content,allowed_mentions:{parse:["users"]}})}).catch(()=>{}); }catch(e){}
+}
+function isSeatOnline(i){
+  const q=G.players[i]; if(!q) return false; if(q.isAI) return true;
+  const id=(G.opts&&G.opts.playerIds)?G.opts.playerIds[i]:null;
+  return !!(id && (id===NET.myId || NET.connectedIds[id]));
+}
+// émetteur désigné = joueur humain EN LIGNE de plus petit siège (déterministe -> pas de doublon)
+function designatedSender(){
+  for(let i=0;i<G.players.length;i++){ if(!G.players[i].isAI && isSeatOnline(i)) return i; }
+  return -1;
+}
 function buildJoinLink(){
-  const room=(G&&G.meta&&G.meta.room)||"";
+  const room=(typeof G!=="undefined"&&G&&G.meta&&G.meta.room)||"";
   const loc=window.location||{};
   const base=(loc.origin||"")+(loc.pathname||"");
   return room? base+"#r="+room : base;
 }
 function notifyDiscordIfNeeded(){
-  if(!NET.online || !isNetHost() || !NET.discordWebhook) return;
-  if(typeof G==="undefined" || !G || !G.started || G.over) return;
-  const p=cur(); if(!p || p.isAI) return;                       // pas de rappel pour une IA
-  const pid=(G.opts&&G.opts.playerIds)?G.opts.playerIds[G.cur]:null;
-  const online = pid && (pid===NET.myId || NET.connectedIds[pid]);
-  if(online) return;                                            // seulement si le joueur est hors ligne
-  if(NET.lastNotifiedTurn===G.turnId) return;                   // une seule notification par tour
-  NET.lastNotifiedTurn=G.turnId;
+  if(!NET.online || typeof G==="undefined" || !G || !G.started || G.over || !G.discordWebhook) return;
+  const p=cur(); if(!p || p.isAI) return;                    // pas de rappel pour une IA
+  if(isSeatOnline(G.cur)) return;                            // seulement si le joueur est hors ligne
+  if(G.notifiedTurn===G.turnId) return;                     // une seule notification par tour
+  if(designatedSender()!==NET.seat) return;                 // c'est un autre joueur en ligne qui envoie
+  G.notifiedTurn=G.turnId;                                   // marqué + diffusé (render->netPush)
   const did=(G.discord&&G.discord[G.cur])||"";
   const who = did ? `<@${did}>` : `**${p.name}**`;
-  const msg=`♻️ **Ecollapse** — ${who}, c'est à toi de jouer ! Rejoins la partie : ${buildJoinLink()}`;
-  try{
-    fetch(NET.discordWebhook,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content:msg,allowed_mentions:{parse:["users"]}})}).catch(()=>{});
-  }catch(e){}
+  discordSend(`♻️ **Ecollapse** — ${who}, c'est à toi de jouer ! Rejoins la partie : ${buildJoinLink()}`);
+}
+function notifyDiscordTrade(fromSeat,toSeat,giveK,gq,reqK,rq){
+  if(!NET.online || typeof G==="undefined" || !G || !G.discordWebhook) return;
+  const to=G.players[toSeat]; if(!to || to.isAI) return;
+  if(isSeatOnline(toSeat)) return;                           // s'il est en ligne, il verra la fenêtre
+  const did=(G.discord&&G.discord[toSeat])||"";
+  const who = did ? `<@${did}>` : `**${to.name}**`;
+  const parts=[];
+  if(gq>0) parts.push(`tu **reçois ${gq}${RES[giveK].ic} ${RES[giveK].label}**`);
+  if(rq>0) parts.push(`tu **donnes ${rq}${RES[reqK].ic} ${RES[reqK].label}**`);
+  discordSend(`🤝 **Ecollapse** — ${who}, **${G.players[fromSeat].name}** te propose un échange : ${parts.join(" et ")}. Pour répondre (oui/non), ouvre la partie : ${buildJoinLink()}`);
 }
 function updateTimer(){
   const el=$("game-timer"); if(!el||typeof G==="undefined"||!G||!G.startTime){ if(el) el.textContent=""; return; }
@@ -2575,6 +2591,7 @@ function trPropose(toSeat,giveK,gq,reqK,rq){
   NET.trCur={from:NET.seat,to:toSeat,giveK,gq,reqK,rq,status:"pending",by:NET.seat,round:1};
   trSend(Object.assign({},NET.trCur));
   log(`🤝 ${G.players[NET.seat].name} propose un échange à ${G.players[toSeat].name}.`);
+  notifyDiscordTrade(NET.seat,toSeat,giveK,gq,reqK,rq);
   if(NET.online && G.players[toSeat] && G.players[toSeat].isAI && isNetHost()){
     aiRespondTrade(Object.assign({},NET.trCur));
   }
@@ -3038,7 +3055,7 @@ window.addEventListener("resize",resizeHome);
 
 /* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
 /* Version de l'application — incrémenter à chaque nouvelle build. */
-const APP_VERSION = "V4.6";
+const APP_VERSION = "V4.7";
 if($("app-version")) $("app-version").textContent = APP_VERSION;
 if($("setup-version")) $("setup-version").textContent = APP_VERSION;
 
@@ -3189,8 +3206,6 @@ function netOnConnected(){
     const publish=()=>{ try{ window.Playroom.myPlayer().setState("nick",(nameEl.value||"").slice(0,16),true); }catch(e){} renderLobbyPlayers(); };
     nameEl.oninput=publish; publish();
   }
-  const mailEl=$("lob-email");
-  if(mailEl){ mailEl.oninput=()=>{ try{ window.Playroom.myPlayer().setState("email",(mailEl.value||"").slice(0,80),true); }catch(e){} }; }
   const discoEl=$("lob-discord");
   if(discoEl){ discoEl.oninput=()=>{ try{ window.Playroom.myPlayer().setState("discord",(discoEl.value||"").replace(/[^0-9]/g,"").slice(0,25),true); }catch(e){} }; }
   const whEl=$("discord-webhook");
@@ -3271,15 +3286,15 @@ $("btn-launch").onclick=()=>{
   const list=NET.players.slice();
   const total=list.length+NET.aiCount;
   if(total<2){ $("lobby-hint").textContent="Il faut au moins 2 joueurs (humains + IA)."; return; }
-  const names=[], seats={}, playerIds=[], ai=[], emails=[], discord=[];
+  const names=[], seats={}, playerIds=[], ai=[], discord=[];
   list.forEach((pl,i)=>{ names.push(playerNick(pl,i)); seats[pl.id]=i; playerIds.push(pl.id); ai.push(false);
-    let em=""; try{ em=(pl.getState&&pl.getState("email"))||""; }catch(e){} emails.push(em);
     let di=""; try{ di=(pl.getState&&pl.getState("discord"))||""; }catch(e){} discord.push(di); });
-  for(let a=0;a<NET.aiCount;a++){ const seat=list.length+a; names.push("IA "+(a+1)); playerIds.push("AI"+a); ai.push(true); emails.push(""); discord.push(""); }
+  for(let a=0;a<NET.aiCount;a++){ const seat=list.length+a; names.push("IA "+(a+1)); playerIds.push("AI"+a); ai.push(true); discord.push(""); }
   NET.seat=seats[NET.myId];
-  if($("discord-webhook")) NET.discordWebhook=($("discord-webhook").value||"").trim();
+  const webhook = $("discord-webhook") ? ($("discord-webhook").value||"").trim() : "";
+  NET.discordWebhook=webhook;
   const room=(window.Playroom.getRoomCode&&window.Playroom.getRoomCode())||"";
-  const opts={ names, ai, emails, discord, objectives:$("opt-obj")?$("opt-obj").checked:true, cat:$("opt-cat")?$("opt-cat").checked:false, seats, playerIds,
+  const opts={ names, ai, discord, discordWebhook:webhook, objectives:$("opt-obj")?$("opt-obj").checked:true, cat:$("opt-cat")?$("opt-cat").checked:false, seats, playerIds,
     tips:$("opt-tips")?$("opt-tips").checked:true,
     durationMin: $("opt-dur")? +$("opt-dur").value : 30,
     endMode: ($("opt-timed")&&$("opt-timed").checked)? "timed":"plastic",
