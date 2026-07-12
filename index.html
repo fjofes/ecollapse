@@ -496,21 +496,22 @@ svg.gulf{width:100%;max-width:360px;height:auto}
         <small style="color:#9fc1bc">Non bloquant — les rappels par e‑mail arriveront dans une prochaine version.</small>
       </div>
 
+      <div class="field">
+        <label>ID Discord (facultatif)</label>
+        <input id="lob-discord" type="text" placeholder="votre ID Discord pour être mentionné" style="width:100%;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--paper)">
+        <small style="color:#9fc1bc">Discord → Paramètres → Avancés → Mode développeur, puis clic droit sur votre nom → Copier l'identifiant. Permet de vous mentionner (@) dans le rappel.</small>
+      </div>
+
       <div id="host-controls" class="hidden">
-        <div class="field">
-          <label>Options (réglées par l'hôte)</label>
-          <div class="toggle">
-            <div class="t-txt">Variante 1 — Objectifs<small>Objectif secret valant des P.v</small></div>
-            <label class="switch"><input type="checkbox" id="lob-obj" checked><span></span></label>
-          </div>
-          <div class="toggle">
-            <div class="t-txt">Cartes catastrophe<small>Déconseillé en première partie</small></div>
-            <label class="switch"><input type="checkbox" id="lob-cat"><span></span></label>
-          </div>
-        </div>
         <div class="field">
           <label>Joueurs IA</label>
           <div class="stepper"><button id="ai-minus">−</button><span class="stval" id="ai-count">0</span><button id="ai-plus">+</button><small>pilotées par l'hôte</small></div>
+        </div>
+        <p style="font-size:12px;color:#9fc1bc;margin:0 0 10px">Les options de partie (objectifs, catastrophe, durée, conseils…) sont celles réglées sur l'écran de configuration.</p>
+        <div class="field">
+          <label>Rappels Discord (facultatif)</label>
+          <input id="discord-webhook" type="text" placeholder="URL du webhook Discord de votre salon" style="width:100%;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--paper)">
+          <small style="color:#9fc1bc">Salon Discord → Paramètres → Intégrations → Webhooks → Nouveau webhook → Copier l'URL. Un message est posté quand c'est le tour d'un joueur <b>hors ligne</b>.</small>
         </div>
         <button class="start" id="btn-launch">Démarrer la partie</button>
         <div class="hint" id="lobby-hint" style="margin-top:10px">Il faut au moins 2 joueurs connectés.</div>
@@ -869,6 +870,7 @@ function initGame(opts){
     startTime: Date.now(),
     meta: opts.meta||null,
     emails: opts.emails||[],
+    discord: opts.discord||[],
     turnId:0,
     helpTips: opts.tips!==false,
     diceSeq:0, lastDice:[],
@@ -1105,12 +1107,27 @@ function phaseBlocked(ph){
   return false;
 }
 function phaseName(ph){return {produce:"production",build:"construction",recycle:"recyclage"}[ph]||ph;}
-function finishBtn(label){return `<div class="mini"><button class="ghost" onclick="finishPhase()">✅ ${label}</button></div>`;}
+function finishBtn(label){return `<div class="mini"><button class="ghost" onclick="finishPhase()">✅ ${label}</button><button class="ghost" onclick="cancelPhase()">↩️ Annuler la phase</button></div>`;}
+function snapshotPhase(){
+  const p=cur();
+  G._snap=JSON.stringify({ cur:G.cur, res:p.res, board:p.board, reservePawns:p.reservePawns||0, gulf:G.gulf.map(s=>s.tokens), plastic:G.plastic, done:G.done });
+}
+function cancelPhase(){
+  if(!G._snap){ G.phase={active:null,poll:0,acted:false}; G.pending=null; render(); setHint("Action annulée."); return; }
+  const s=JSON.parse(G._snap);
+  const p=G.players[s.cur];
+  p.res=s.res; p.board=s.board; p.reservePawns=s.reservePawns;
+  s.gulf.forEach((tk,i)=>{ G.gulf[i].tokens=tk; });
+  G.plastic=s.plastic; G.done=s.done;
+  G.phase={active:null,poll:0,acted:false}; G.pending=null; G._snap=null;
+  render(); setHint(`<b>Tour de ${cur().name}.</b> Phase annulée — vous pouvez refaire une phase ou terminer le tour.`);
+}
+window.cancelPhase=cancelPhase;
 function markPhaseDone(){
   const ph=G.phase.active;
   if(ph) G.done[ph]=G.phase.acted;       // ne consomme la phase que si une action a eu lieu
   G.phase={active:null, poll:0, acted:false};
-  G.pending=null; render();
+  G.pending=null; G._snap=null; render();
   setHint("Phase terminée. Choisissez une autre phase ou terminez le tour.");
 }
 function finishPhase(){
@@ -1130,6 +1147,7 @@ function startProduce(){
   if(phaseBlocked("produce")) return;
   const producers=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&B[c.type].produces&&!c.usedProd);
   if(!producers.length){ setHint("Aucun bâtiment de production disponible (déjà utilisés ou non construits)."); return; }
+  snapshotPhase();
   G.phase={active:"produce", poll:0, acted:false};
   setPending({mode:"produce"});
   setHint("<b>Production.</b> Touchez une ferme, usine ou centrale (clignotante) pour produire. Chaque usage génère 1 pollution, placée à la fin de la phase."+finishBtn("Terminer la production"));
@@ -1152,6 +1170,7 @@ function doProduce(p,key){
 function startBuild(){
   const p=cur();
   if(phaseBlocked("build")) return;
+  snapshotPhase();
   G.phase={active:"build", poll:0, acted:false};
   buildHint(p);
 }
@@ -1324,6 +1343,7 @@ function placePollutionOnBoard(p,key){
 function placePollutionOnGulf(slotIdx,lvl){
   const p=cur();
   if(!G.pending||G.pending.mode!=="placePollution") return;
+  if(G.pending.origin==="tax"){ setHint("La pénalité de taxe se place uniquement sur votre terrain (pas sur le Gulf Stream)."); return; }
   const slot=G.gulf[slotIdx];
   if(slot.tokens.length>=3){ setHint("Cette case du Gulf Stream est pleine (max 3)."); return; }
   slot.tokens.push({lvl:1, turn:G.turnId});
@@ -1345,6 +1365,7 @@ function startRecycle(){
   if(phaseBlocked("recycle")) return;
   const centers=Object.entries(p.board).filter(([k,c])=>c.kind==="building"&&c.type==="recyclage"&&!c.usedRecy);
   if(!centers.length){ setHint("Aucun centre de recyclage disponible."); return; }
+  snapshotPhase();
   G.phase={active:"recycle", poll:0, acted:false};
   const capLeft={}; centers.forEach(([k,c])=>capLeft[k]=B.recyclage.recyCap[c.lvl]);
   G.pending={mode:"recycle", capLeft, granted:{}, gulfPts:0, total:0};
@@ -1447,6 +1468,29 @@ function render(){
   renderTips(cur());
   updateTimer();
   aiScheduleIfNeeded();
+  notifyDiscordIfNeeded();
+}
+function buildJoinLink(){
+  const room=(G&&G.meta&&G.meta.room)||"";
+  const loc=window.location||{};
+  const base=(loc.origin||"")+(loc.pathname||"");
+  return room? base+"#r="+room : base;
+}
+function notifyDiscordIfNeeded(){
+  if(!NET.online || !isNetHost() || !NET.discordWebhook) return;
+  if(typeof G==="undefined" || !G || !G.started || G.over) return;
+  const p=cur(); if(!p || p.isAI) return;                       // pas de rappel pour une IA
+  const pid=(G.opts&&G.opts.playerIds)?G.opts.playerIds[G.cur]:null;
+  const online = pid && (pid===NET.myId || NET.connectedIds[pid]);
+  if(online) return;                                            // seulement si le joueur est hors ligne
+  if(NET.lastNotifiedTurn===G.turnId) return;                   // une seule notification par tour
+  NET.lastNotifiedTurn=G.turnId;
+  const did=(G.discord&&G.discord[G.cur])||"";
+  const who = did ? `<@${did}>` : `**${p.name}**`;
+  const msg=`♻️ **Ecollapse** — ${who}, c'est à toi de jouer ! Rejoins la partie : ${buildJoinLink()}`;
+  try{
+    fetch(NET.discordWebhook,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content:msg,allowed_mentions:{parse:["users"]}})}).catch(()=>{});
+  }catch(e){}
 }
 function updateTimer(){
   const el=$("game-timer"); if(!el||typeof G==="undefined"||!G||!G.startTime){ if(el) el.textContent=""; return; }
@@ -1997,7 +2041,22 @@ function makePawn(){
   const hook=mkBox(0.07,0.07,0.07,dark,0.5); hook.position.x=0.44; g.add(hook);     // crochet
   return g;
 }
-function makePollution(lvl){ const THREE=window.THREE,g=new THREE.Group(); for(let i=0;i<lvl;i++){ const s=new THREE.Mesh(new THREE.SphereGeometry(0.16,10,10),matt("#3b3a34",.9)); s.position.set((i%2)*0.14-0.07,0.18+i*0.2,0); g.add(s); } return g; }
+function makeTrashBin3D(){
+  const THREE=window.THREE, g=new THREE.Group();
+  const body=matt("#2f6b47",.7), lid=matt("#245539",.7), dark=matt("#14311f",.7);
+  const b=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.13,0.34,12),body); b.position.y=0.17; g.add(b);       // corps
+  const l=new THREE.Mesh(new THREE.CylinderGeometry(0.19,0.19,0.05,12),lid); l.position.y=0.36; g.add(l);        // couvercle
+  const h=new THREE.Mesh(new THREE.TorusGeometry(0.06,0.02,6,10),dark); h.rotation.x=Math.PI/2; h.position.y=0.42; g.add(h); // poignée
+  for(let i=0;i<3;i++){ const s=new THREE.Mesh(new THREE.BoxGeometry(0.02,0.24,0.02),dark); s.position.set(-0.08+i*0.08,0.17,0.155); g.add(s); } // stries
+  return g;
+}
+function makePollution(lvl){
+  const THREE=window.THREE, g=new THREE.Group();
+  const n=Math.max(1,lvl);
+  const spots=[[0,0],[0.2,0.08],[-0.15,-0.1]];
+  for(let i=0;i<n;i++){ const bin=makeTrashBin3D(); const s=1-i*0.08; bin.scale.set(s,s,s); const sp=spots[i]||[0,0]; bin.position.set(sp[0],0,sp[1]); bin.rotation.y=i*1.1; g.add(bin); }
+  return g;
+}
 function syncBoard3D(p){
   if(!BOARD3D.inited||!p) return;
   const THREE=window.THREE, grp=BOARD3D.content;
@@ -2101,7 +2160,7 @@ function renderBoard(p){
 function pollutionGlyph(x,y,lvl){
   const col=lvl===1?"#d9d2c4":lvl===2?"#b7ad97":"#8f8567";
   return `<g class="pollchip"><circle cx="${x}" cy="${y}" r="16" fill="${col}" stroke="#5b5340" stroke-width="2"/>`+
-    `<text x="${x}" y="${y-2}" class="cellico" style="font-size:16px">☣️</text>`+
+    `<text x="${x}" y="${y-2}" class="cellico" style="font-size:16px">🗑️</text>`+
     `<g><circle cx="${x+12}" cy="${y+12}" r="8.5" fill="#3a3320"/><text x="${x+12}" y="${y+12}" class="cellico" style="font-size:11px;font-weight:800;fill:#fff">${lvl}</text></g></g>`;
 }
 
@@ -2418,17 +2477,38 @@ function showTradeModal(p){
   function submit(){
     const to=partner(), err=$("tr-err"); if(err) err.textContent="";
     if(gq<=0 && rq<=0){ if(err) err.textContent="Indiquez une quantité à donner et/ou à demander."; return; }
+    if(gq>0 && p.res[giveK]<gq){ if(err) err.textContent="Ressources insuffisantes."; return; }
     if(NET.online){
-      if(gq>0 && p.res[giveK]<gq){ if(err) err.textContent="Ressources insuffisantes."; return; }
       trPropose(to.i,giveK,gq,reqK,rq); closeModal();
       setHint(`🤝 Proposition envoyée à <b>${to.name}</b> — en attente de sa réponse… <div class="mini"><button class="ghost" onclick="trCancel()">Annuler la proposition</button></div>`);
       return;
     }
+    if(to.isAI){ closeModal(); localAiTrade(p,to,giveK,gq,reqK,rq,1); return; }
     const r=doTrade(p,to,giveK,gq,reqK,rq);
     if(!r.ok){ if(err) err.textContent=r.err; return; }
     closeModal(); render();
   }
   draw();
+}
+function localAiTrade(p,ai,giveK,gq,reqK,rq,round){
+  const recv={k:giveK,q:gq}, give={k:reqK,q:rq};        // du point de vue de l'IA
+  const ev=aiEvaluateTrade(ai,recv,give,round);
+  if(ev.action==="accept"){ const r=doTrade(p,ai,giveK,gq,reqK,rq); setHint(r.ok?`🤝 ${ai.name} (IA) accepte l'échange.`:("⚠️ "+r.err)); render(); return; }
+  if(ev.action==="refuse"){ setHint(`❌ ${ai.name} (IA) refuse l'échange.`); return; }
+  showLocalAiCounter(p,ai,ev,round+1);
+}
+function showLocalAiCounter(p,ai,ev,round){
+  const mount=$("modal-mount");
+  const iGive=ev.gq>0?`<div>➡️ Vous donnez <b>${ev.gq}${RES[ev.giveK].ic} ${RES[ev.giveK].label}</b></div>`:"";
+  const iGet=ev.rq>0?`<div>⬅️ Vous recevez <b>${ev.rq}${RES[ev.reqK].ic} ${RES[ev.reqK].label}</b></div>`:"";
+  mount.innerHTML=`<div class="modal"><div class="sheet">
+    <h2>↩️ Contre-proposition de ${ai.name} (IA)</h2>
+    <p class="sub">L'IA propose des termes qui lui semblent plus équitables :</p>
+    <div style="font-size:14px;line-height:1.8;margin-bottom:8px">${iGive}${iGet}</div>
+    <div class="closebar"><button id="lc-no" style="background:#5a2b23;color:#ffd9d0">Refuser</button><button id="lc-yes" style="background:#fff;color:#0e2a2e">Accepter</button></div>
+  </div></div>`;
+  $("lc-yes").onclick=()=>{ const r=doTrade(p,ai,ev.giveK,ev.gq,ev.reqK,ev.rq); closeModal(); setHint(r.ok?`🤝 Échange conclu avec ${ai.name}.`:("⚠️ "+r.err)); render(); };
+  $("lc-no").onclick=()=>{ closeModal(); setHint(`Vous avez refusé la contre-proposition de ${ai.name}.`); };
 }
 function doTrade(p,to,giveK,gq,reqK,rq){
   if(gq<=0 && rq<=0) return {ok:false,err:"Indiquez une quantité à donner et/ou à demander."};
@@ -2476,10 +2556,19 @@ function aiRespondTrade(t){
   const ai=G.players[responder]; if(!ai || !ai.isAI) return;
   const recv={k:t.giveK,q:t.gq}, give={k:t.reqK,q:t.rq};
   const ev=aiEvaluateTrade(ai,recv,give,t.round||1);
+  const me=NET.seat;
   setTimeout(()=>{
-    if(ev.action==="accept"){ trSend(Object.assign({},t,{status:"accepted",by:responder})); log(`🤖 ${ai.name} (IA) accepte l'échange.`); }
+    if(ev.action==="accept"){
+      if(me===t.from){   // l'hôte est aussi l'initiateur -> il exécute directement (son propre message ne serait pas re-pollé)
+        const r=doTrade(G.players[t.from],G.players[t.to],t.giveK,t.gq,t.reqK,t.rq);
+        if(r.ok){ trSend({from:t.from,to:t.to,status:"done"}); closeModal(); render(); setHint(`🤝 ${ai.name} (IA) accepte — échange conclu !`); }
+        else { trSend({from:t.from,to:t.to,status:"failed",err:r.err}); setHint("⚠️ Échange impossible : "+r.err); }
+      } else {
+        trSend(Object.assign({},t,{status:"accepted",by:responder})); log(`🤖 ${ai.name} (IA) accepte l'échange.`);
+      }
+    }
     else if(ev.action==="counter"){ trSend(Object.assign({},t,{giveK:ev.giveK,gq:ev.gq,reqK:ev.reqK,rq:ev.rq,status:"counter",by:responder,round:(t.round||1)+1})); log(`🤖 ${ai.name} (IA) fait une contre-proposition.`); }
-    else { trSend(Object.assign({},t,{status:"refused",by:responder})); log(`🤖 ${ai.name} (IA) refuse l'échange.`); }
+    else { trSend(Object.assign({},t,{status:"refused",by:responder})); if(me===t.from){ closeModal(); setHint(`❌ ${ai.name} (IA) refuse l'échange.`); } log(`🤖 ${ai.name} (IA) refuse l'échange.`); }
   }, 700);
 }
 function trPropose(toSeat,giveK,gq,reqK,rq){
@@ -2949,7 +3038,7 @@ window.addEventListener("resize",resizeHome);
 
 /* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
 /* Version de l'application — incrémenter à chaque nouvelle build. */
-const APP_VERSION = "V4.4";
+const APP_VERSION = "V4.6";
 if($("app-version")) $("app-version").textContent = APP_VERSION;
 if($("setup-version")) $("setup-version").textContent = APP_VERSION;
 
@@ -2981,7 +3070,7 @@ window.pickBuildType=pickBuildType;
    puis collez ici son identifiant. Laissé vide = mode développement Playroom. */
 const PLAYROOM_GAME_ID = "ngD0JunWQlaOiXezq15U";
 
-var NET = { online:false, seat:null, myId:null, players:[], applyingRemote:false, endShown:false, pollTimer:null, trLastV:0, trCur:null, connectedIds:{}, aiCount:0, reconnect:false, welcomed:false };
+var NET = { online:false, seat:null, myId:null, players:[], applyingRemote:false, endShown:false, pollTimer:null, trLastV:0, trCur:null, connectedIds:{}, aiCount:0, reconnect:false, welcomed:false, discordWebhook:"", lastNotifiedTurn:-1 };
 
 function showGameScreen(){ try{if(typeof stopHome3D==="function")stopHome3D();}catch(e){} ["home","setup","local","online","end"].forEach(id=>$(id).classList.add("hidden")); $("game").classList.remove("hidden"); }
 function showLobbyScreen(){ try{if(typeof stopHome3D==="function")stopHome3D();}catch(e){} ["home","setup","local","game","end"].forEach(id=>$(id).classList.add("hidden")); $("online").classList.remove("hidden"); }
@@ -3102,6 +3191,10 @@ function netOnConnected(){
   }
   const mailEl=$("lob-email");
   if(mailEl){ mailEl.oninput=()=>{ try{ window.Playroom.myPlayer().setState("email",(mailEl.value||"").slice(0,80),true); }catch(e){} }; }
+  const discoEl=$("lob-discord");
+  if(discoEl){ discoEl.oninput=()=>{ try{ window.Playroom.myPlayer().setState("discord",(discoEl.value||"").replace(/[^0-9]/g,"").slice(0,25),true); }catch(e){} }; }
+  const whEl=$("discord-webhook");
+  if(whEl){ whEl.oninput=()=>{ NET.discordWebhook=(whEl.value||"").trim(); }; }
   window.Playroom.onPlayerJoin(handlePlayerJoin);
   startPolling();
 }
@@ -3178,13 +3271,15 @@ $("btn-launch").onclick=()=>{
   const list=NET.players.slice();
   const total=list.length+NET.aiCount;
   if(total<2){ $("lobby-hint").textContent="Il faut au moins 2 joueurs (humains + IA)."; return; }
-  const names=[], seats={}, playerIds=[], ai=[], emails=[];
+  const names=[], seats={}, playerIds=[], ai=[], emails=[], discord=[];
   list.forEach((pl,i)=>{ names.push(playerNick(pl,i)); seats[pl.id]=i; playerIds.push(pl.id); ai.push(false);
-    let em=""; try{ em=(pl.getState&&pl.getState("email"))||""; }catch(e){} emails.push(em); });
-  for(let a=0;a<NET.aiCount;a++){ const seat=list.length+a; names.push("IA "+(a+1)); playerIds.push("AI"+a); ai.push(true); emails.push(""); }
+    let em=""; try{ em=(pl.getState&&pl.getState("email"))||""; }catch(e){} emails.push(em);
+    let di=""; try{ di=(pl.getState&&pl.getState("discord"))||""; }catch(e){} discord.push(di); });
+  for(let a=0;a<NET.aiCount;a++){ const seat=list.length+a; names.push("IA "+(a+1)); playerIds.push("AI"+a); ai.push(true); emails.push(""); discord.push(""); }
   NET.seat=seats[NET.myId];
+  if($("discord-webhook")) NET.discordWebhook=($("discord-webhook").value||"").trim();
   const room=(window.Playroom.getRoomCode&&window.Playroom.getRoomCode())||"";
-  const opts={ names, ai, emails, objectives:$("lob-obj").checked, cat:$("lob-cat").checked, seats, playerIds,
+  const opts={ names, ai, emails, discord, objectives:$("opt-obj")?$("opt-obj").checked:true, cat:$("opt-cat")?$("opt-cat").checked:false, seats, playerIds,
     tips:$("opt-tips")?$("opt-tips").checked:true,
     durationMin: $("opt-dur")? +$("opt-dur").value : 30,
     endMode: ($("opt-timed")&&$("opt-timed").checked)? "timed":"plastic",
