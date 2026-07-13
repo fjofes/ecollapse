@@ -257,6 +257,26 @@ svg.gulf{width:100%;max-width:360px;height:auto}
 .stdot.off{background:transparent;border:2px solid #8b9a9a}
 #reconnect-toast{position:fixed;left:50%;top:14px;transform:translateX(-50%) translateY(-120%);z-index:300;max-width:92vw;background:linear-gradient(180deg,#125b4e,#0d3f38);color:#eafff6;border:1px solid rgba(127,224,176,.4);border-radius:12px;padding:12px 16px;font-size:13px;font-weight:600;box-shadow:0 12px 30px rgba(0,0,0,.4);transition:transform .4s ease;text-align:center}
 #reconnect-toast.show{transform:translateX(-50%) translateY(0)}
+#tuto{position:fixed;inset:0;z-index:400;pointer-events:none}
+.tuto-strip,#tuto-bubble{pointer-events:auto}
+#tuto.hidden{display:none}
+.tuto-strip{position:fixed;background:rgba(4,18,20,.74);pointer-events:auto}
+#tuto-ring{position:fixed;border:3px solid #6fe0b6;border-radius:14px;box-shadow:0 0 0 3px rgba(111,224,182,.35),0 0 22px rgba(111,224,182,.55);pointer-events:none;transition:all .25s ease}
+#tuto-bubble{position:fixed;max-width:min(440px,92vw);background:linear-gradient(180deg,#12333a,#0c2429);border:1px solid rgba(111,224,182,.5);border-radius:16px;padding:14px 16px;box-shadow:0 16px 40px rgba(0,0,0,.55);pointer-events:auto;z-index:401}
+.tuto-head{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.tuto-ava{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#3ddc84,#1f8f57);display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+.tuto-head b{font-size:15px;color:#eafff6}
+#tuto-progress{margin-left:auto;font-size:12px;color:#9fc1bc}
+#tuto-text{font-size:14px;line-height:1.5;color:#e3efed}
+#tuto-text b{color:#8ff0c6}
+#tuto-wait{margin-top:8px;font-size:13px;color:#e8c86a}
+.tuto-nav{display:flex;gap:8px;margin-top:12px}
+.tuto-nav button{flex:1;padding:9px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;border:1px solid var(--line);background:rgba(255,255,255,.08);color:#e3efed}
+#tuto-next{background:#6fe0b6;color:#08201f;border-color:#6fe0b6}
+#tuto-next:disabled{opacity:.4;cursor:not-allowed}
+#tuto-quit{flex:0 0 auto;background:transparent;border-color:#7a2f2f;color:#e6a79c}
+#btn-learn{background:linear-gradient(180deg,#1c6b53,#124b3b);color:#eafff6;border:1px solid rgba(111,224,182,.4)}
+.modal{z-index:600}
 
 /* end screen */
 #end{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -309,6 +329,11 @@ svg.gulf{width:100%;max-width:360px;height:auto}
 .rsheet h3{font-size:13px;text-transform:uppercase;letter-spacing:.7px;color:#8fc0ba;margin:18px 0 4px}
 .rsheet p{font-size:14px;line-height:1.6;color:#d7e8e4;margin:4px 0}
 .rsheet ul{margin:4px 0;padding-left:18px}.rsheet li{font-size:14px;line-height:1.6;color:#d7e8e4;margin:3px 0}
+.rsheet table{width:100%;border-collapse:collapse;margin:8px 0 4px;font-size:13.5px}
+.rsheet th,.rsheet td{border:1px solid rgba(143,192,186,.22);padding:5px 8px;text-align:center;color:#d7e8e4}
+.rsheet th{background:rgba(143,192,186,.12);color:#bfe3dc;font-weight:700}
+.rsheet td.l{text-align:left}
+.rsheet caption{font-size:12px;color:#9fc8c2;text-align:left;margin-bottom:3px}
 .rsheet .rclose{position:sticky;bottom:-2px;margin-top:22px;display:flex;gap:10px;background:linear-gradient(180deg,transparent,rgba(14,34,38,.97) 30%);padding-top:10px}
 .rsheet .rclose button{flex:1;padding:13px;border-radius:12px;font-weight:800;font-size:15px}
 #r-back{background:rgba(255,255,255,.1);color:#fff;border:1px solid var(--line)}
@@ -334,6 +359,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
     <div class="slogan">«&nbsp;un choix, une conséquence…&nbsp;»</div>
     <div class="btns">
       <button class="b-play" id="btn-play">Jouer</button>
+      <button class="b-rules" id="btn-learn">🎓 Apprendre à jouer</button>
       <button class="b-rules" id="btn-rules">Règle du jeu</button>
     </div>
   </div>
@@ -371,11 +397,42 @@ svg.gulf{width:100%;max-width:360px;height:auto}
     <h3>Continent de plastique & événements</h3>
     <ul>
       <li>À chaque tour de table : une carte événement (météo, parfois catastrophe) et un lancer de dé envoient la pollution des cases correspondantes vers le continent de plastique.</li>
-      <li><b>À 30 pollutions, la partie s'arrête.</b></li>
+      <li>La partie s'arrête dès que le continent atteint son <b>seuil</b>. Ce seuil n'est <b>pas fixe</b> : il vaut environ <b>7,5 × nombre de joueurs × (durée ⁄ 30 min)</b>, avec un minimum de 8 (repère : 2 joueurs / 30 min ≈ 15). Il s'affiche en jeu sous la forme <b>pollution actuelle / seuil</b>.</li>
+    </ul>
+
+    <h3>Valeur des bâtiments (points de victoire)</h3>
+    <table>
+      <caption>P.v gagnés selon le niveau du bâtiment en fin de partie.</caption>
+      <tr><th class="l">Bâtiment</th><th>Niv.1</th><th>Niv.2</th><th>Niv.3</th></tr>
+      <tr><td class="l">🏠 Habitation</td><td>1</td><td>2</td><td>4</td></tr>
+      <tr><td class="l">🌾 Ferme</td><td>2</td><td>3</td><td>5</td></tr>
+      <tr><td class="l">🏭 Usine</td><td>2</td><td>3</td><td>5</td></tr>
+      <tr><td class="l">🔋 Centrale</td><td>2</td><td>3</td><td>5</td></tr>
+      <tr><td class="l">♻️ Centre de recyclage</td><td>3</td><td>5</td><td>7</td></tr>
+    </table>
+
+    <h3>Pénalités de pollution (sur votre plateau)</h3>
+    <table>
+      <caption>Malus en fin de partie pour chaque pollution restée sur votre terrain (le Gulf Stream n'est jamais pénalisé).</caption>
+      <tr><th>Pollution Niv.1</th><th>Pollution Niv.2</th><th>Pollution Niv.3</th></tr>
+      <tr><td>−1 P.v</td><td>−3 P.v</td><td>−5 P.v</td></tr>
+    </table>
+
+    <h3>Règles spécifiques</h3>
+    <ul>
+      <li><b>Pions construction :</b> une habitation fournit un nombre de pions égal à son niveau. On ne bâtit qu'en remplaçant un pion ; sans habitation, plus de nouveaux bâtiments.</li>
+      <li><b>Taxe d'habitation :</b> en début de tour, 1 🍎 par habitation. Impayée, chaque nourriture manquante devient <b>1 pollution</b> à placer sur votre plateau.</li>
+      <li><b>Placer la pollution :</b> sur le Gulf Stream (n'importe quelle de vos 3 cases, jamais pénalisée) ou sur votre plateau (case libre adjacente à un bâtiment). Sur le plateau, re-cliquer une pollution l'empile jusqu'au <b>niveau 3</b>.</li>
+      <li><b>Recyclage :</b> capacité par utilisation = 1 (Niv.1), 2 (Niv.2), 3 (Niv.3). Seul un centre <b>côtier</b> peut recycler le Gulf Stream. Améliorer un centre exige des points de recyclage <b>en réserve</b> : 5 pour le Niv.2, 15 pour le Niv.3 (non dépensés). Les centres Niv.2/3 rendent en plus des ressources (+1, +2 ⚡).</li>
+      <li><b>Pollution du tour :</b> une pollution générée pendant votre tour <b>ne peut pas être recyclée le même tour</b> — il faut attendre le tour suivant.</li>
+      <li><b>Bonus « sans action » :</b> si vous ne produisez ni ne construisez : <b>+3 ♻️</b> ; s'il vous manque l'une des deux : <b>+1 ♻️</b>.</li>
+      <li><b>Gulf Stream :</b> il tourne d'1 case par tour (sens indiqué par les flèches de courant). L'événement « courants » le fait avancer de 2, « stagnation » l'immobilise. Un dé sur une de vos cases envoie sa pollution au continent.</li>
+      <li><b>Météo :</b> modifie la production d'un type de bâtiment (±1) ou le Gulf Stream, ou relance le dé (« brassage »). <b>Catastrophe</b> (si activée) : détruit le bâtiment de plus haut niveau visé, remplacé par un pion + pollutions égales à son niveau.</li>
+      <li><b>Objectif secret (variante 1) :</b> chaque joueur en reçoit un, valant 10 à 20 P.v s'il est rempli en fin de partie.</li>
     </ul>
 
     <h3>Score final</h3>
-    <p>On additionne : bâtiments (selon leur niveau), points de recyclage (×2), objectif secret éventuel — et on retire les pénalités de pollution restée sur le plateau.</p>
+    <p>On additionne : bâtiments (selon leur niveau, tableau ci‑dessus), points de recyclage (×2), objectif secret éventuel — et on retire les pénalités de pollution restée sur le plateau.</p>
 
     <div class="rclose">
       <button id="r-back">Fermer</button>
@@ -521,6 +578,23 @@ svg.gulf{width:100%;max-width:360px;height:auto}
 
 <!-- ================= GAME ================= -->
 <section id="game" class="hidden">
+  <div id="tuto" class="hidden">
+    <div class="tuto-strip" id="tuto-top"></div>
+    <div class="tuto-strip" id="tuto-bottom"></div>
+    <div class="tuto-strip" id="tuto-left"></div>
+    <div class="tuto-strip" id="tuto-right"></div>
+    <div id="tuto-ring"></div>
+    <div id="tuto-bubble">
+      <div class="tuto-head"><div class="tuto-ava">🌱</div><b id="tuto-name">Écho</b><span id="tuto-progress"></span></div>
+      <div id="tuto-text"></div>
+      <div id="tuto-wait" class="hidden">👉 <i>À toi de jouer : effectue l'action indiquée pour continuer.</i></div>
+      <div class="tuto-nav">
+        <button id="tuto-prev">← Précédent</button>
+        <button id="tuto-quit">Quitter</button>
+        <button id="tuto-next">Suivant →</button>
+      </div>
+    </div>
+  </div>
   <div id="reconnect-toast"></div>
   <div id="pview-overlay">
     <div class="pview-card">
@@ -579,7 +653,7 @@ svg.gulf{width:100%;max-width:360px;height:auto}
         <div class="gulf-wrap">
           <svg class="gulf" id="gulf" viewBox="-22 -22 404 404" aria-label="Gulf Stream"></svg>
         </div>
-        <div class="gulf-cap">Le courant tourne dans le sens inverse du jeu. Un 🎲 envoie la pollution des cases tirées vers le continent de plastique.</div>
+        <div class="gulf-cap">Le courant tourne dans le sens inverse du jeu (flèches = sens de rotation). Un 🎲 envoie la pollution des cases tirées vers le continent de plastique.</div>
       </div>
     </div>
 
@@ -1103,7 +1177,7 @@ function phaseBlocked(ph){
   return false;
 }
 function phaseName(ph){return {produce:"production",build:"construction",recycle:"recyclage"}[ph]||ph;}
-function finishBtn(label){return `<div class="mini"><button class="ghost" onclick="finishPhase()">✅ ${label}</button><button class="ghost" onclick="cancelPhase()">↩️ Annuler la phase</button></div>`;}
+function finishBtn(label){const cancel=(typeof G!=="undefined"&&G&&G.tutorial)?"":`<button class="ghost" onclick="cancelPhase()">↩️ Annuler la phase</button>`;return `<div class="mini"><button class="ghost" onclick="finishPhase()">✅ ${label}</button>${cancel}</div>`;}
 function snapshotPhase(){
   const p=cur();
   G._snap=JSON.stringify({ cur:G.cur, res:p.res, board:p.board, reservePawns:p.reservePawns||0, gulf:G.gulf.map(s=>s.tokens), plastic:G.plastic, done:G.done });
@@ -1458,13 +1532,14 @@ function render(){
   renderLegend();
   renderLog();
   syncActionButtons();
-  // fenêtre d'info de fin de tour de table (fin -> pollution -> météo)
-  if(G.diceSeq && G.diceSeq!==_shownDiceSeq){ _shownDiceSeq=G.diceSeq; showRoundEnd(G.lastDice||[], G.weather); }
+  // fenêtre d'info de fin de tour de table (fin -> pollution -> météo) — désactivée pendant le tutoriel (ne pas flouter le plateau narré)
+  if(G.diceSeq && G.diceSeq!==_shownDiceSeq){ _shownDiceSeq=G.diceSeq; if(!(typeof TUT!=="undefined"&&TUT.on)) showRoundEnd(G.lastDice||[], G.weather); }
   if(view3D && BOARD3D.inited) syncBoard3D(cur());
   renderTips(cur());
   updateTimer();
   aiScheduleIfNeeded();
   notifyDiscordIfNeeded();
+  if(typeof TUT!=="undefined" && TUT.on) tutCheck();
 }
 function discordSend(content){
   const wh=(typeof G!=="undefined"&&G&&G.discordWebhook)||"";
@@ -1592,9 +1667,228 @@ function abandonGame(){
 window.abandonGame=abandonGame;
 
 /* =========================================================================
+   MODE APPRENTISSAGE — tutoriel scripté, guidé par la mascotte "Écho"
+   ========================================================================= */
+const TUT={on:false, i:0, max:0, steps:[]};
+function loadTutStep(){ try{ const s=localStorage.getItem("ectuto_step"); return s?parseInt(s,10):0; }catch(e){ return 0; } }
+function saveTutStep(){ try{ localStorage.setItem("ectuto_step", String(TUT.i)); }catch(e){} }
+function clearTutStep(){ try{ localStorage.removeItem("ectuto_step"); }catch(e){} }
+
+function buildTutorialGame(){
+  initGame({names:["Toi","Écho"], ai:[false,true], objectives:true, cat:false, tips:false, durationMin:30, endMode:"plastic"});
+  G.tutorial=true;
+  const p=G.players[0];
+  Object.keys(p.board).forEach(k=>{ p.board[k]={kind:"empty"}; });
+  p.board["0,0"]={kind:"building",type:"habitation",lvl:2,usedProd:false,usedRecy:false};
+  p.board["1,0"]={kind:"building",type:"ferme",lvl:1,usedProd:false,usedRecy:false};
+  const coastKey=(typeof COAST_CONNECTED!=="undefined"&&COAST_CONNECTED[1])||(COAST_CELLS[2]&&COAST_CELLS[2].key)||"0,2";
+  p.board[coastKey]={kind:"building",type:"recyclage",lvl:1,usedRecy:false};
+  TUT.coastKey=coastKey;
+  p.board["0,1"]={kind:"pawn"};
+  p.res={food:6,energy:6,raw:6,recy:0};
+  const agr=OBJECTIVES.find(o=>o.id==="agrar"); if(agr) p.objective=agr;
+  G.cur=0; G.phase={active:null,poll:0,acted:false}; G.pending=null; G.done={produce:false,build:false,recycle:false};
+  // pollution "d'un tour précédent" (turn:-1) sur le Gulf Stream du joueur : recyclable à la phase de recyclage
+  // (la pollution générée pendant ce tour, turn===turnId, n'est volontairement pas recyclable)
+  if(G.gulf&&G.gulf.length){ const gs=(p.gulfStart||0)%G.gulf.length; G.gulf[gs].tokens.push({lvl:1,turn:-1}); }
+  render();
+}
+function fermeUsed(){ const c=G.players[0].board["1,0"]; return !!(c&&c.usedProd); }
+function nbType(t){ return Object.values(G.players[0].board).filter(c=>c.kind==="building"&&c.type===t).length; }
+function boardPollCount(){ return Object.values(G.players[0].board).filter(c=>c.kind==="pollution").length; }
+
+function tutorialScript(){
+  const ic=k=>RES[k].ic, bn=t=>B[t].name;
+  return [
+    {text:`Salut, moi c'est <b>Écho</b> 🌱, ton guide ! Je vais t'apprendre <b>Ecollapse</b> en te faisant jouer, étape par étape. Le but : marquer le plus de <b>points de victoire</b> en bâtissant ta société… sans étouffer la planète sous la pollution. Clique sur <b>Suivant →</b>.`, spot:null},
+    {text:`Voici <b>ton plateau</b>. Chaque case peut accueillir un bâtiment ou un pion. En haut à gauche, tu as déjà une <b>${bn("habitation")}</b> 🏠 (elle loge tes habitants) et une <b>${bn("ferme")}</b> 🌾.`, spot:"#board"},
+    {text:`Ici, ta <b>réserve de ressources</b> : ${ic("food")} Nourriture, ${ic("energy")} Énergie, ${ic("raw")} Matière première, et ${ic("recy")} Recyclage. Tu en as besoin pour produire et construire.`, spot:"#res-row"},
+    {text:`Là, le <b>Continent de plastique</b> 🗑️ : quand trop de pollution s'y accumule, la partie se termine. Surveille‑le !`, spot:".plastic"},
+    {text:`Et voici le <b>Gulf Stream</b> 🌊 : tes 3 cases (encadrées de blanc) peuvent recevoir de la pollution. Attention, un coup de dé peut l'emporter vers le Continent de plastique…`, spot:"#gulf"},
+    {text:`Un tour se joue en 3 phases : <b>Production</b>, <b>Construction</b>, <b>Recyclage</b>. Commençons par la <b>Production</b> : clique sur le bouton <b>Produire</b>.`, spot:"#act-produce", action:true, allow:["act-produce"], cond:()=>G.phase&&G.phase.active==="produce"},
+    {text:`Bien ! Maintenant clique sur ta <b>${bn("ferme")}</b> 🌾 (elle clignote) pour produire de la <b>Nourriture ${ic("food")}</b>.`, spot:"cell:1,0", action:true, allow:[], cond:fermeUsed},
+    {text:`Tu vois la ressource « filer » vers ta réserve 🎉. Mais attention : <b>produire génère 1 pollution</b>, que tu devras <b>placer juste après</b>. Termine la phase : clique sur <b>✅ Terminer la production</b>.`, spot:"#hint", action:true, allow:[], cond:()=>G.pending&&G.pending.mode==="placePollution"},
+    {text:`Place maintenant cette pollution sur ton <b>Gulf Stream</b> 🌊 : clique une de <b>tes cases encadrées de blanc</b>. C'est le meilleur choix — le courant peut l'emporter vers le Continent, et ton centre de recyclage côtier pourra la nettoyer. <i>(Sur ton plateau, elle resterait et te ferait perdre des points.)</i>`, spot:"#gulf", action:true, allow:[], cond:()=>G.done.produce},
+    {text:`Parfait, la Production est faite ✅. <b>Stratégie</b> : chaque production coûte 1 pollution. Place-la de préférence sur le <b>Gulf Stream</b> 🌊 (le courant ou ton recyclage peuvent l'évacuer) plutôt que sur ton plateau, où elle reste et te fait <b>perdre des points</b>.`, spot:null},
+    {text:`Passons à la <b>Construction</b>. Clique sur <b>Construire</b>.`, spot:"#act-build", action:true, allow:["act-build"], cond:()=>G.phase&&G.phase.active==="build"},
+    {text:`Tu as un <b>pion chantier</b> 🏗️ sur ton plateau. Clique dessus, puis choisis de bâtir une <b>${bn("ferme")}</b> 🌾. <b>Pourquoi une ferme ?</b> Chaque tour, ton <b>${bn("habitation")}</b> te réclame une <b>taxe en Nourriture ${ic("food")}</b> : sans fermes, tu ne peux plus la payer !`, spot:"#board", action:true, allow:[], cond:()=>G.phase&&G.phase.active==="build"&&G.phase.acted},
+    {text:`Excellent 👏. Termine la phase : clique sur <b>✅ Terminer la construction</b>. La construction a elle aussi généré <b>1 pollution</b> à placer.`, spot:"#hint", action:true, allow:[], cond:()=>G.pending&&G.pending.mode==="placePollution"},
+    {text:`Place cette pollution sur ton <b>Gulf Stream</b> 🌊 (une de tes cases encadrées de blanc), comme tu l'as fait pour la Production.`, spot:"#gulf", action:true, allow:[], cond:()=>G.done.build},
+    {text:`<b>Stratégie clé</b> : garde toujours des <b>${bn("habitation")}</b> 🏠 et des <b>${bn("ferme")}</b> 🌾 en réserve de construction. Sans habitation, tu manques de <b>pions</b> ; sans ferme, tu ne paies plus la taxe — et tu serais forcé de <b>détruire un bâtiment</b> pour continuer. À éviter !`, spot:null},
+    {text:`Troisième phase : le <b>Recyclage</b> ♻️. Il nettoie la pollution et rapporte des points ${ic("recy")}. Clique sur <b>Recycler</b>.`, spot:"#act-recycle", action:true, allow:["act-recycle"], cond:()=>G.phase&&G.phase.active==="recycle"},
+    {text:`Ton <b>${bn("recyclage")}</b> ♻️ est sur une <b>case côtière</b> : seul un centre au bord de l'eau peut nettoyer le <b>Gulf Stream</b>. Une pollution <b>d'un tour précédent</b> y traîne (encadrée) : clique‑la pour la recycler (<b>+1${ic("recy")}</b>). <i>Règle : la pollution générée <b>ce tour‑ci</b> n'est pas encore recyclable — il faut attendre le tour suivant.</i>`, spot:"#gulf", action:true, allow:[], cond:()=>G.phase&&G.phase.active==="recycle"&&G.phase.acted},
+    {text:`Bien joué 🎉. Termine la phase : clique sur <b>✅ Terminer le recyclage</b>.`, spot:"#hint", action:true, allow:[], cond:()=>G.done.recycle},
+    {text:`Bien joué ! Chaque centre a une <b>capacité</b> limitée par tour (indiquée dessus). Recycler est le meilleur moyen de gagner des points ${ic("recy")} tout en gardant la planète propre.`, spot:null},
+    {text:`Tu as fait tes 3 phases. Tu peux aussi <b>échanger</b> des ressources avec les autres joueurs (bouton <b>Échanger</b>) : donner et/ou demander. Utile quand il te manque une ressource précise.`, spot:"#act-trade"},
+    {text:`Quand tu as fini, tu passes la main. Clique sur <b>Terminer le tour</b>.`, spot:"#act-end", action:true, allow:["act-end"], cond:()=>G.cur!==0||G.round>1},
+    {text:`C'est au tour d'<b>Écho (IA)</b> 🤖. Je vais jouer comme un adversaire réfléchi : je produis avec mes fermes, je construis selon mon objectif secret, et je recycle pour marquer des points — tout en surveillant le Continent. Regarde le <b>Journal</b> !`, spot:"#log", enter:()=>{ try{ tutRunAiTurn(); }catch(e){} }},
+    {text:`À la fin d'un <b>tour de table</b>, on lance les <b>dés</b> 🎲 : ils désignent des cases du Gulf Stream dont la pollution part vers le <b>Continent de plastique</b>. Une <b>carte météo</b> peut aussi booster ou pénaliser une production. <i>Clique sur <b>Suivant</b> pour voir le dé rouler.</i>`, spot:".plastic", onNext:()=>tutReplayDice()},
+    {text:`Ton <b>objectif secret</b> 🎯 est affiché ici (encadré). Le tien : <b>Agrariste</b> — « avoir 3 fermes, dont 2 de niveau 3 ». Rempli en fin de partie, il rapporte de gros <b>points bonus</b>. Oriente ta stratégie dessus… sans négliger les fondamentaux !`, spot:"#obj-card"},
+    {textFn:()=>tutScoreText(), spot:".plastic"},
+    {text:`Tu sais tout ! 🎓 Résumé : <b>Produis</b> (mais gère la pollution), <b>Construis</b> (fermes pour la taxe, habitations pour les pions), <b>Recycle</b> (points + planète propre), et vise ton <b>objectif</b>. À toi de jouer !`, spot:null},
+  ];
+}
+function tutRunAiTurn(){
+  // exécute le tour de l'IA (narré via le Journal) puis rend la main
+  try{
+    const p=G.players[1];
+    if(typeof aiProduce==="function") aiProduce(p);
+    if(typeof aiBuild==="function") aiBuild(p);
+    if(typeof aiRecycle==="function") aiRecycle(p);
+    endTurn();
+    G.cur=0;
+    render();
+  }catch(e){}
+}
+
+function tutReplayDice(){
+  // rejoue l'animation du lancer déjà effectué au tour de l'IA (la pollution a déjà été déplacée)
+  try{
+    TUT._diceReplay=true;
+    const t=$("tuto"); if(t) t.style.visibility="hidden";   // masque le spotlight le temps de l'animation
+    let dice=G.lastDice; if(!dice||!dice.length) dice=[{d:1,moved:0}];
+    showRoundEnd(dice, G.weather);
+  }catch(e){
+    TUT._diceReplay=false; const t=$("tuto"); if(t) t.style.visibility=""; tutGo(TUT.i+1);
+  }
+}
+function tutScoreText(){
+  const p=G.players[0];
+  let rows="", bld=0;
+  allBuildings(p).forEach(b=>{ const v=B[b.type].vp[b.lvl]; bld+=v; rows+=`<tr><td style="padding:1px 0">${B[b.type].ic} ${B[b.type].name} Niv.${b.lvl}</td><td style="text-align:right">+${v}</td></tr>`; });
+  const recy=p.res.recy*2;
+  const polls=boardPollution(p); let pollPen=0; polls.forEach(pp=>pollPen+=POLL_PENALTY[pp.lvl]);
+  const o=p.objective, ok=!!(o&&o.check(p)), obj=ok?o.vp:0;
+  const total=bld+recy+obj+pollPen;
+  return `La partie se termine quand le <b>Continent de plastique</b> est plein ou au <b>temps imparti</b>. Voici <b>ton</b> décompte 👇`+
+    `<table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:13px">`+
+    rows+
+    `<tr><td style="padding-top:3px"><b>Bâtiments</b></td><td style="text-align:right"><b>+${bld}</b></td></tr>`+
+    `<tr><td>♻️ Recyclage (${p.res.recy}×2)</td><td style="text-align:right">+${recy}</td></tr>`+
+    `<tr><td>🎯 ${o?o.name:"Objectif"} — <b style="color:${ok?'#8ff0c6':'#e6a79c'}">${ok?"atteint":"non atteint"}</b></td><td style="text-align:right">${obj?("+"+obj):"0"}</td></tr>`+
+    `<tr><td>🗑️ Pollution plateau (${polls.length})</td><td style="text-align:right">${pollPen}</td></tr>`+
+    `<tr style="border-top:1px solid rgba(255,255,255,.3)"><td style="padding-top:3px"><b>Total</b></td><td style="text-align:right"><b>${total} P.v</b></td></tr>`+
+    `</table>`+
+    (ok
+      ? `Bravo, ton objectif « ${o.name} » est <b>atteint</b> (+${o.vp}) 🎯 ! Ta pollution est sur le <b>Gulf Stream</b> → <b>0 pénalité</b> de plateau 👍.`
+      : `Ta pollution est sur le <b>Gulf Stream</b> → <b>0 pénalité</b> de plateau 👍. Ton objectif « ${o?o.name:""} » (${o?o.desc:""}) n'est <b>pas encore rempli</b> — il ne rapporte donc rien cette fois.`);
+}
+function tutRect(spot){
+  if(!spot) return null;
+  let el=null;
+  if(spot.indexOf("cell:")===0){ const b=$("board"); el=(b&&b.querySelector)?b.querySelector('polygon[data-key="'+spot.slice(5)+'"]'):null; }
+  else if(spot.charAt(0)==="#") el=$(spot.slice(1));
+  else if(spot.charAt(0)===".") el=(document.querySelector?document.querySelector(spot):null);
+  else el=$(spot);
+  if(!el||!el.getBoundingClientRect) return null;
+  const r=el.getBoundingClientRect();
+  if((r.width===0&&r.height===0)) return null;
+  return r;
+}
+function tutPlace(rect){
+  const W=window.innerWidth||360, H=window.innerHeight||640, pad=8;
+  const ring=$("tuto-ring"),top=$("tuto-top"),bot=$("tuto-bottom"),left=$("tuto-left"),right=$("tuto-right"),bubble=$("tuto-bubble");
+  if(!ring) return;
+  if(!rect){
+    ring.style.display="none";
+    top.style.cssText="left:0;top:0;width:"+W+"px;height:"+H+"px";
+    bot.style.cssText="width:0;height:0"; left.style.cssText="width:0;height:0"; right.style.cssText="width:0;height:0";
+    const bw=bubble.offsetWidth||360, bh=bubble.offsetHeight||160;
+    bubble.style.left=Math.max(8,(W-bw)/2)+"px"; bubble.style.top=Math.max(8,(H-bh)/2)+"px"; return;
+  }
+  const x=rect.left-pad,y=rect.top-pad,w=rect.width+pad*2,h=rect.height+pad*2;
+  ring.style.display="block"; ring.style.left=x+"px"; ring.style.top=y+"px"; ring.style.width=w+"px"; ring.style.height=h+"px";
+  top.style.cssText="left:0;top:0;width:"+W+"px;height:"+Math.max(0,y)+"px";
+  bot.style.cssText="left:0;top:"+(y+h)+"px;width:"+W+"px;height:"+Math.max(0,H-(y+h))+"px";
+  left.style.cssText="left:0;top:"+Math.max(0,y)+"px;width:"+Math.max(0,x)+"px;height:"+h+"px";
+  right.style.cssText="left:"+(x+w)+"px;top:"+Math.max(0,y)+"px;width:"+Math.max(0,W-(x+w))+"px;height:"+h+"px";
+  const bw=bubble.offsetWidth||360, bh=bubble.offsetHeight||160;
+  let by=y+h+12; if(by+bh>H-8) by=Math.max(8,y-bh-12);
+  let bx=Math.min(Math.max(8,x),Math.max(8,W-bw-8));
+  bubble.style.left=bx+"px"; bubble.style.top=by+"px";
+}
+function tutLock(allow){
+  ["act-produce","act-build","act-recycle","act-trade","act-end","btn-abandon"].forEach(id=>{ const el=$(id); if(el) el.disabled = allow.indexOf(id)<0; });
+}
+function tutReposition(){ const st=TUT.steps[TUT.i]; if(st) tutPlace(tutRect(st.spot)); }
+function tutStepDone(st, reviewing){ return !st.action || reviewing || (st.cond && st.cond()); }
+function tutRender(){
+  const st=TUT.steps[TUT.i]; if(!st){ tutFinish(); return; }
+  if($("tuto-progress")) $("tuto-progress").textContent=(TUT.i+1)+" / "+TUT.steps.length;
+  if($("tuto-text")) $("tuto-text").innerHTML=(st.textFn?st.textFn():st.text);
+  if(st.enter && !st._entered){ st._entered=true; try{ st.enter(); }catch(e){} }
+  tutLock(st.allow||[]);
+  const reviewing = TUT.i < TUT.max;
+  const done = tutStepDone(st, reviewing);
+  if($("tuto-prev")) $("tuto-prev").disabled = (TUT.i===0);
+  if($("tuto-next")) $("tuto-next").disabled = !done;
+  if($("tuto-wait")) $("tuto-wait").classList.toggle("hidden", !(st.action && !reviewing && !(st.cond&&st.cond())));
+  tutReposition();
+}
+function tutCheck(){
+  if(!TUT.on) return;
+  const st=TUT.steps[TUT.i]; if(!st) return;
+  if(st.action && TUT.i>=TUT.max && st.cond && st.cond()){ tutGo(TUT.i+1); return; }
+  tutRender();
+}
+function tutGo(i){
+  if(i>=TUT.steps.length){ tutFinish(); return; }
+  if(i<0) i=0;
+  TUT.i=i; if(i>TUT.max) TUT.max=i; saveTutStep(); tutRender();
+}
+function tutNext(){ const st=TUT.steps[TUT.i]; const reviewing=TUT.i<TUT.max; if(!tutStepDone(st,reviewing)) return; if(st.onNext && !reviewing){ st.onNext(); return; } tutGo(TUT.i+1); }
+function tutPrev(){ if(TUT.i>0) tutGo(TUT.i-1); }
+function tutQuit(){
+  TUT.on=false; if($("tuto")) $("tuto").classList.add("hidden");
+  tutLock(["act-produce","act-build","act-recycle","act-trade","act-end","btn-abandon"]);
+  const loc=window.location; window.location.href=(loc.origin||"")+(loc.pathname||"");
+}
+function tutFinish(){
+  TUT.on=false; clearTutStep();
+  if($("tuto")) $("tuto").classList.add("hidden");
+  const mount=$("modal-mount");
+  if(mount){
+    mount.innerHTML=`<div class="modal"><div class="sheet">
+      <h2>🎓 Bravo, tutoriel terminé !</h2>
+      <p class="sub">Tu maîtrises les bases d'Ecollapse. Envie d'enchaîner sur une vraie partie ?</p>
+      <div class="closebar"><button id="tf-home">Accueil</button><button id="tf-play" style="background:#6fe0b6;color:#08201f">Jouer une partie</button></div>
+    </div></div>`;
+    if($("tf-home")) $("tf-home").onclick=()=>{ const loc=window.location; window.location.href=(loc.origin||"")+(loc.pathname||""); };
+    if($("tf-play")) $("tf-play").onclick=()=>{ closeModal(); $("game").classList.add("hidden"); $("setup").classList.remove("hidden"); };
+  }
+}
+function startTutorial(resume){
+  buildTutorialGame();
+  TUT.steps=tutorialScript();
+  TUT.on=true;
+  let start = resume ? loadTutStep() : 0;
+  if(isNaN(start)||start<0) start=0; if(start>=TUT.steps.length) start=TUT.steps.length-1;
+  TUT.i=start; TUT.max=start;
+  showGameScreen();
+  if($("tuto")) $("tuto").classList.remove("hidden");
+  render();
+  tutRender();
+}
+function askLearn(){
+  const saved=loadTutStep();
+  if(saved && saved>0){
+    const mount=$("modal-mount");
+    mount.innerHTML=`<div class="modal"><div class="sheet">
+      <h2>🎓 Apprendre à jouer</h2>
+      <p class="sub">Tu avais commencé le tutoriel. Veux-tu reprendre où tu t'étais arrêté, ou recommencer ?</p>
+      <div class="closebar"><button id="lr-restart">Recommencer</button><button id="lr-resume" style="background:#6fe0b6;color:#08201f">Reprendre</button></div>
+    </div></div>`;
+    if($("lr-resume")) $("lr-resume").onclick=()=>{ closeModal(); startTutorial(true); };
+    if($("lr-restart")) $("lr-restart").onclick=()=>{ closeModal(); clearTutStep(); startTutorial(false); };
+  } else startTutorial(false);
+}
+window.startTutorial=startTutorial; window.tutNext=tutNext; window.tutPrev=tutPrev; window.tutQuit=tutQuit;
+
+/* =========================================================================
    IA HEURISTIQUE (jeu LOCAL uniquement) — joue automatiquement le tour d'un joueur IA
    ========================================================================= */
 function aiScheduleIfNeeded(){
+  if(typeof TUT!=="undefined" && TUT.on) return;   // en tutoriel, l'IA est narrée manuellement
   if(typeof G==="undefined" || !G || !G.started || G.over) return;
   const p=cur(); if(!p || !p.isAI) return;
   // en ligne : seul l'hôte pilote les IA (les autres appareils ne font rien)
@@ -1825,7 +2119,11 @@ function renderRoundStep(){
 }
 function roundEndNext(){
   _roundIdx++;
-  if(_roundIdx>=_roundSteps.length){ const ov=$("round-overlay"); if(ov) ov.classList.remove("show"); if(DICE3D.raf) cancelAnimationFrame(DICE3D.raf); return; }
+  if(_roundIdx>=_roundSteps.length){
+    const ov=$("round-overlay"); if(ov) ov.classList.remove("show"); if(DICE3D.raf) cancelAnimationFrame(DICE3D.raf);
+    if(typeof TUT!=="undefined" && TUT.on && TUT._diceReplay){ TUT._diceReplay=false; const t=$("tuto"); if(t) t.style.visibility=""; tutGo(TUT.i+1); }
+    return;
+  }
   renderRoundStep();
 }
 window.roundEndNext=roundEndNext;
@@ -2221,6 +2519,18 @@ function renderGulf(p){
   let html="";
   // anneau du courant
   html+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="${2*r+6}"/>`;
+  // flèches directionnelles de courant (sens de rotation du Gulf Stream = horaire, dans les intervalles entre cases)
+  {
+    const d2r=Math.PI/180, sc=Math.max(0.72, Math.min(1.3, r/15));
+    for(let j=0;j<LEN;j++){
+      const angDeg=-90+(j+0.5)*step;
+      const ax=cx+R*Math.cos(angDeg*d2r), ay=cy+R*Math.sin(angDeg*d2r);
+      html+=`<g transform="translate(${ax.toFixed(1)} ${ay.toFixed(1)}) rotate(${(angDeg+90).toFixed(1)}) scale(${sc.toFixed(2)})" opacity="0.5" style="pointer-events:none">`+
+        `<path d="M -6 -5 L -1 0 L -6 5" fill="none" stroke="#7fe0d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`+
+        `<path d="M -1 -5 L 4 0 L -1 5" fill="none" stroke="#c9f5ec" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`+
+        `</g>`;
+    }
+  }
   // croissant coloré autour des 3 cases actives de CHAQUE joueur (identification)
   G.players.forEach(pl=>{
     const mid=pl.gulfStart+1;
@@ -2778,7 +3088,7 @@ $("btn-again").onclick=()=>location.reload();
    PAGE D'ACCUEIL — scène 3D (three.js) : travelling 360° autour de la ville
    ========================================================================= */
 var H3={renderer:null,scene:null,cam:null,raf:0,t:0,last:0,running:false,left:false,
-        clouds:null,smoke:[],ripples:[],ROT:0.11,CAMR:64,CAMH:20,LOOKY:6,reduce:false};
+        clouds:null,smoke:[],ripples:[],ROT:0.11,CAMR:64,CAMH:20,LOOKY:6,ANG0:2.0,reduce:false};
 
 function _gradTex(THREE,c0,c1){
   const cv=document.createElement("canvas");cv.width=8;cv.height=256;
@@ -2948,9 +3258,30 @@ function initHome3D(){
     }
     farm(34,16);farm(30,26);
 
-    // ---- file indienne de villageois : des immeubles vers l'usine ----
-    H3.walkers=[];H3.walkPath={a:{x:14,z:-2},b:{x:27,z:-8}};
-    for(let i=0;i<6;i++){const g=farmer(0,0,M.townBody,0.85);H3.walkers.push({g,off:i/6});}
+    // ---- chemins de terre reliant les bâtiments (empruntés par les villageois, pas les fermiers) ----
+    const M_path=mat("#a8945f",{roughness:1.0});
+    function pathSeg(x1,z1,x2,z2,w){
+      const dx=x2-x1, dz=z2-z1, len=Math.hypot(dx,dz);
+      const m=add(G.box,M_path,(x1+x2)/2,0.06,(z1+z2)/2,len+(w||1.5)*0.4,0.12,w||1.5);
+      m.rotation.y=Math.atan2(-dz,dx);
+    }
+    // boucle principale : immeubles -> maisons -> usine -> retour
+    H3.walkRoute=[[12,1],[15,-3],[19,0],[21,-4],[26,-7],[28,-8],[24,-10],[17,-7],[13,-9],[9,-4]];
+    for(let i=0;i<H3.walkRoute.length;i++){ const a=H3.walkRoute[i], b=H3.walkRoute[(i+1)%H3.walkRoute.length]; pathSeg(a[0],a[1],b[0],b[1],1.7); }
+    // jonctions arrondies aux sommets du parcours
+    H3.walkRoute.forEach(p=>{ flat(add(G.circ,M_path,p[0],0.065,p[1],1.0,1.0,1.0)); });
+    // branches vers quelques maisons
+    [[12,1,8,5],[19,0,16,4],[15,-3,17,-7],[9,-4,11,7]].forEach(s=>pathSeg(s[0],s[1],s[2],s[3],1.2));
+    // pré-calcul du parcours (segments + longueur totale) pour l'animation
+    (function(){
+      const pts=H3.walkRoute, segs=[]; let total=0;
+      for(let i=0;i<pts.length;i++){ const a=pts[i], b=pts[(i+1)%pts.length]; const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz); segs.push({a,b,dx,dz,len,acc:total}); total+=len; }
+      H3.walkSegs=segs; H3.walkLen=total;
+    })();
+
+    // ---- villageois marchant sur les chemins (pas les fermiers) ----
+    H3.walkers=[];
+    for(let i=0;i<8;i++){ const g=farmer(0,0,M.townBody,0.85); H3.walkers.push({g,off:i/8}); }
 
     // ---- arbres sur les pentes ----
     for(let i=0;i<20;i++){
@@ -3034,20 +3365,28 @@ function updateRipples(dt){
     me.scale.set(s,s,s); me.material.opacity=(1-p)*0.22;
   });
 }
+function routeAt(s){
+  const segs=H3.walkSegs; if(!segs||!segs.length) return {x:0,z:0,ry:0};
+  let d=(((s%1)+1)%1)*H3.walkLen;
+  for(let i=0;i<segs.length;i++){ const sg=segs[i]; if(d<sg.acc+sg.len){ const t=(d-sg.acc)/sg.len; return {x:sg.a[0]+sg.dx*t, z:sg.a[1]+sg.dz*t, ry:Math.atan2(sg.dx,sg.dz)}; } }
+  const sg=segs[segs.length-1]; return {x:sg.b[0], z:sg.b[1], ry:Math.atan2(sg.dx,sg.dz)};
+}
 function loopHome(now){
   if(!H3.running){return;}
   H3.raf=requestAnimationFrame(loopHome);
   const dt=Math.min(0.05,(now-H3.last)/1000||0);H3.last=now;H3.t+=dt;
-  const ang=H3.reduce? 0.6 : H3.t*H3.ROT;
+  const ang=H3.reduce? H3.ANG0 : H3.ANG0 + H3.t*H3.ROT;
   H3.cam.position.set(Math.sin(ang)*H3.CAMR, H3.CAMH+(H3.reduce?0:Math.sin(H3.t*0.4)*1.3), Math.cos(ang)*H3.CAMR);
   H3.cam.lookAt(0,H3.LOOKY,0);
   if(H3.clouds && !H3.reduce)H3.clouds.rotation.y+=dt*0.008;
   if(H3.sun && H3.sun.rays && !H3.reduce)H3.sun.rays.rotation+=dt*0.06;
   if(H3.farmers)H3.farmers.forEach(f=>{const s=H3.reduce?0:Math.sin(H3.t*f.spd+f.ph);f.g.rotation.x=H3.reduce?0.1:s*0.22;if(f.g.userData.armL){f.g.userData.armL.rotation.x=s*0.7;f.g.userData.armR.rotation.x=-s*0.7;}});
-  if(H3.walkers&&H3.walkPath){const A=H3.walkPath.a,B=H3.walkPath.b,ry=Math.atan2(B.x-A.x,B.z-A.z);
-    H3.walkers.forEach(w=>{const u=(w.off+H3.t*0.03)%1,x=A.x+(B.x-A.x)*u,z=A.z+(B.z-A.z)*u;
-      w.g.position.set(x,H3.reduce?0:Math.abs(Math.sin(u*22+w.off*6))*0.12,z);w.g.rotation.y=ry;
-      if(!H3.reduce&&w.g.userData.armL){const sw=Math.sin(H3.t*6+w.off*6)*0.8;w.g.userData.armL.rotation.x=sw;w.g.userData.armR.rotation.x=-sw;}});}
+  if(H3.walkers&&H3.walkSegs){
+    H3.walkers.forEach(w=>{ const s=w.off+H3.t*0.02, P=routeAt(s);
+      w.g.position.set(P.x, H3.reduce?0:Math.abs(Math.sin(s*40+w.off*6))*0.12, P.z);
+      w.g.rotation.y=P.ry;
+      if(!H3.reduce&&w.g.userData.armL){const sw=Math.sin(H3.t*6+w.off*6)*0.8;w.g.userData.armL.rotation.x=sw;w.g.userData.armR.rotation.x=-sw;}});
+  }
   updateSmoke(dt);updateRipples(dt);
   H3.renderer.render(H3.scene,H3.cam);
 }
@@ -3064,6 +3403,12 @@ function stopHome3D(){
 function leaveHome(){H3.left=true;stopHome3D();$("home").classList.add("hidden");$("setup").classList.remove("hidden");}
 
 $("btn-play").onclick=leaveHome;
+if($("btn-learn")) $("btn-learn").onclick=askLearn;
+if($("tuto-next")) $("tuto-next").onclick=tutNext;
+if($("tuto-prev")) $("tuto-prev").onclick=tutPrev;
+if($("tuto-quit")) $("tuto-quit").onclick=tutQuit;
+window.addEventListener("resize",()=>{ if(typeof TUT!=="undefined"&&TUT.on) tutReposition(); });
+window.addEventListener("scroll",()=>{ if(typeof TUT!=="undefined"&&TUT.on) tutReposition(); }, {passive:true, capture:true});
 $("btn-rules").onclick=()=>$("rules-overlay").classList.remove("hidden");
 $("r-back").onclick=()=>$("rules-overlay").classList.add("hidden");
 $("r-play").onclick=()=>{$("rules-overlay").classList.add("hidden");leaveHome();};
@@ -3072,7 +3417,7 @@ window.addEventListener("resize",resizeHome);
 
 /* démarrage : attendre que three.js soit prêt (ou repli sur le fond dégradé) */
 /* Version de l'application — incrémenter à chaque nouvelle build. */
-const APP_VERSION = "V4.9";
+const APP_VERSION = "V5.7";
 if($("app-version")) $("app-version").textContent = APP_VERSION;
 if($("setup-version")) $("setup-version").textContent = APP_VERSION;
 
